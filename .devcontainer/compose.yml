@@ -1,0 +1,28 @@
+services:
+  dev:
+    tty: true
+    hostname: devcontainer
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile.devcontainer
+      pull: true
+      args:
+        PROJECT_NAME: sql-email
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: 3001
+    volumes:
+      # Workspace
+      - ..:/workspace/sql-email:cached
+      # Home
+      - ../volumes/home:/home/vscode:cached
+      # Additional scripts
+      - ~/scripts:/home/vscode/scripts:ro
+    # networks:
+    #   agent-team-bridge-network:
+    #     aliases:
+    #       - sql-email
+# networks:
+#   agent-team-bridge-network:
+#     name: agent-team-bridge

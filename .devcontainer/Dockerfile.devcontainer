@@ -1,0 +1,19 @@
+FROM ghcr.io/atelier-nyaarium/workspace:latest
+
+# Workaround: Ubuntu 24.04 ships a `ubuntu` user at UID 1000, which blocks
+# updateRemoteUserUID from remapping vscode to the host UID.
+# https://github.com/microsoft/vscode-remote-release/issues/10030
+RUN usermod -u 2000 ubuntu 2>/dev/null; groupmod -g 2000 ubuntu 2>/dev/null; exit 0
+
+ARG PROJECT_NAME
+ENV PROJECT_NAME=$PROJECT_NAME
+RUN test -n "$PROJECT_NAME" || (echo "Docker build error: PROJECT_NAME build arg is required" && exit 1) \
+    && mkdir -p /workspace/$PROJECT_NAME \
+	&& chown vscode:vscode /workspace /workspace/$PROJECT_NAME
+
+# Install additional dependencies
+# ...
+
+COPY .devcontainer/post-*.sh /var/
+ENV DEBIAN_FRONTEND=dialog
+RUN /finalize
