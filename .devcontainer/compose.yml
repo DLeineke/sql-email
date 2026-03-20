@@ -1,4 +1,16 @@
 services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    volumes:
+      - ../volumes/db:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: sql_email
+    ports:
+      - "5432:5432"
+
   dev:
     tty: true
     hostname: devcontainer
@@ -10,8 +22,11 @@ services:
         PROJECT_NAME: sql-email
     ports:
       - "3001:3001"
+    depends_on:
+      - postgres
     environment:
       PORT: 3001
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/sql_email
     volumes:
       # Workspace
       - ..:/workspace/sql-email:cached
@@ -26,3 +41,4 @@ services:
 # networks:
 #   agent-team-bridge-network:
 #     name: agent-team-bridge
+

@@ -12,7 +12,9 @@ RUN test -n "$PROJECT_NAME" || (echo "Docker build error: PROJECT_NAME build arg
 	&& chown vscode:vscode /workspace /workspace/$PROJECT_NAME
 
 # Install additional dependencies
-# ...
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY .devcontainer/post-*.sh /var/
 ENV DEBIAN_FRONTEND=dialog
