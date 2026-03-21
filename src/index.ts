@@ -1,32 +1,31 @@
-import { handleClients } from "./routes/clients";
-import { handleEvents } from "./routes/events";
+import { resolve } from "node:path";
+import { migrate } from "drizzle-orm/postgres-js/migrator";
+import { Hono } from "hono";
+import { db } from "./db";
 import { processReminders } from "./reminders";
+import { adminRoutes } from "./routes/admin";
+import { clientRoutes } from "./routes/clients";
+import { eventRoutes } from "./routes/events";
+
+// Apply pending migrations on startup
+await migrate(db, {
+	migrationsFolder: resolve(import.meta.dir, "../drizzle"),
+});
+console.log("Migrations applied");
+
+const app = new Hono();
+
+app.get("/", (c) => c.text("sql-email reminder service"));
+app.post("/reminders/process", async (c) => c.json(await processReminders()));
+app.route("/admin", adminRoutes);
+app.route("/clients", clientRoutes);
+app.route("/events", eventRoutes);
 
 const port = Number(process.env.PORT) || 3001;
 
 const server = Bun.serve({
-  port,
-  async fetch(req) {
-    const url = new URL(req.url);
-
-    if (url.pathname === "/") {
-      return new Response("sql-email reminder service");
-    }
-
-    // POST /reminders/process — trigger reminder processing
-    if (url.pathname === "/reminders/process" && req.method === "POST") {
-      const result = await processReminders();
-      return Response.json(result);
-    }
-
-    // Route to handlers
-    const response =
-      (await handleClients(req, url)) ?? (await handleEvents(req, url));
-
-    if (response) return response;
-
-    return Response.json({ error: "Not Found" }, { status: 404 });
-  },
+	port,
+	fetch: app.fetch,
 });
 
 console.log(`Listening on http://localhost:${server.port}`);
