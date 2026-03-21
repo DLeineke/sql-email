@@ -1,1 +1,10 @@
 /volumes
+node_modules/
+dist/
+build/
+drizzle/
+.env
+.env.*
+!.env.example
+.DS_Store
+*.tsbuildinfo
