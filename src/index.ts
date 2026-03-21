@@ -6,6 +6,7 @@ import { processReminders } from "./reminders";
 import { adminRoutes } from "./routes/admin";
 import { clientRoutes } from "./routes/clients";
 import { eventRoutes } from "./routes/events";
+import { signupRoutes } from "./routes/signup";
 
 // Apply pending migrations on startup
 await migrate(db, {
@@ -20,6 +21,7 @@ app.post("/reminders/process", async (c) => c.json(await processReminders()));
 app.route("/admin", adminRoutes);
 app.route("/clients", clientRoutes);
 app.route("/events", eventRoutes);
+app.route("/signup", signupRoutes);
 
 const port = Number(process.env.PORT) || 3001;
 

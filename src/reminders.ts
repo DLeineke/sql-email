@@ -7,6 +7,7 @@ import {
 	events,
 	sentReminders,
 } from "./db/schema";
+import { sendEmail } from "./email";
 
 interface PendingReminder {
 	eventId: number;
@@ -114,7 +115,7 @@ export async function processReminders() {
 					reminders: [],
 				});
 			}
-			summaryClients.get(reminder.clientId)!.reminders.push(reminder);
+			summaryClients.get(reminder.clientId)?.reminders.push(reminder);
 		} else {
 			individualReminders.push(reminder);
 		}
@@ -122,22 +123,34 @@ export async function processReminders() {
 
 	// Send individual reminder emails
 	for (const r of individualReminders) {
-		console.log(
-			`[EMAIL] To: ${r.clientEmail} | "${r.eventTitle}" is in ${r.daysBefore} day(s) (${r.eventDate})`,
-		);
+		const subject = `Reminder: "${r.eventTitle}" is in ${r.daysBefore} day(s)`;
+		const html = `
+			<p>Hi${r.clientName ? ` ${r.clientName}` : ""},</p>
+			<p>This is a reminder that <strong>${r.eventTitle}</strong> is coming up in <strong>${r.daysBefore} day(s)</strong> on ${r.eventDate}.</p>
+		`.trim();
+		console.log(`[EMAIL] To: ${r.clientEmail} | ${subject}`);
+		await sendEmail(r.clientEmail, subject, html);
 		await markReminderSent(r.reminderId, r.clientId);
 	}
 
 	// Send summary emails
 	for (const [clientId, data] of summaryClients) {
-		const lines = data.reminders
+		const itemsHtml = data.reminders
 			.map(
-				(r) => `- "${r.eventTitle}" in ${r.daysBefore} day(s) (${r.eventDate})`,
+				(r) =>
+					`<li><strong>${r.eventTitle}</strong> — in ${r.daysBefore} day(s) (${r.eventDate})</li>`,
 			)
 			.join("\n");
+		const subject = `Your daily reminder summary (${data.reminders.length} upcoming)`;
+		const html = `
+			<p>Hi${data.name ? ` ${data.name}` : ""},</p>
+			<p>Here is your daily reminder summary:</p>
+			<ul>${itemsHtml}</ul>
+		`.trim();
 		console.log(
-			`[SUMMARY EMAIL] To: ${data.email} | ${data.reminders.length} reminder(s):\n${lines}`,
+			`[SUMMARY EMAIL] To: ${data.email} | ${data.reminders.length} reminder(s)`,
 		);
+		await sendEmail(data.email, subject, html);
 		for (const r of data.reminders) {
 			await markReminderSent(r.reminderId, clientId);
 		}
