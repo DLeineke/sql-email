@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { Cron } from "croner";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { Hono } from "hono";
 import { db } from "./db";
@@ -31,3 +32,20 @@ const server = Bun.serve({
 });
 
 console.log(`Listening on http://localhost:${server.port}`);
+
+// Schedule daily reminder processing
+const reminderCronExpr = process.env.REMINDER_CRON ?? "0 8 * * *";
+const reminderCron = new Cron(reminderCronExpr, async () => {
+	console.log("[cron] Processing reminders...");
+	try {
+		const result = await processReminders();
+		console.log(
+			`[cron] Done: ${result.individual} individual, ${result.summaries} summaries`,
+		);
+	} catch (err) {
+		console.error("[cron] Failed:", err);
+	}
+});
+console.log(
+	`[cron] Reminder job scheduled (next: ${reminderCron.nextRun()?.toISOString()}`,
+);
