@@ -3,8 +3,10 @@ import { Cron } from "croner";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { Hono } from "hono";
 import { db } from "./db";
+import { requireAuth } from "./middleware/auth";
 import { processReminders } from "./reminders";
 import { adminRoutes } from "./routes/admin";
+import { authRoutes } from "./routes/auth";
 import { clientRoutes } from "./routes/clients";
 import { eventRoutes } from "./routes/events";
 import { signupRoutes } from "./routes/signup";
@@ -18,11 +20,24 @@ console.log("Migrations applied");
 const app = new Hono();
 
 app.get("/", (c) => c.text("sql-email reminder service"));
-app.post("/reminders/process", async (c) => c.json(await processReminders()));
+
+// Auth routes (public)
+app.route("/auth", authRoutes);
+
+// Public signup
+app.route("/signup", signupRoutes);
+
+// Protected: admin UI
+app.use("/admin/*", requireAuth);
 app.route("/admin", adminRoutes);
+
+// Protected: API routes
+app.use("/clients/*", requireAuth);
+app.use("/events/*", requireAuth);
+app.use("/reminders/*", requireAuth);
+app.post("/reminders/process", async (c) => c.json(await processReminders()));
 app.route("/clients", clientRoutes);
 app.route("/events", eventRoutes);
-app.route("/signup", signupRoutes);
 
 const port = Number(process.env.PORT) || 3001;
 

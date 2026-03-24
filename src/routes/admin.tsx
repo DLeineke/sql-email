@@ -4,6 +4,7 @@ import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { Hono } from "hono";
 import { Layout } from "../components/Layout";
 import { db } from "../db";
+import { adminClientRoutes } from "./admin-clients";
 import { adminEventRoutes } from "./admin-events";
 
 interface JournalEntry {
@@ -41,6 +42,7 @@ async function getAppliedMigrations(): Promise<Map<number, Date>> {
 
 export const adminRoutes = new Hono();
 
+adminRoutes.route("/clients", adminClientRoutes);
 adminRoutes.route("/events", adminEventRoutes);
 
 adminRoutes.get("/", (c) => {
@@ -52,6 +54,14 @@ adminRoutes.get("/", (c) => {
 					Quick Links
 				</h2>
 				<ul class="space-y-2">
+					<li>
+						<a
+							href="/admin/clients"
+							class="text-blue-400 hover:text-blue-300 transition-colors"
+						>
+							Clients
+						</a>
+					</li>
 					<li>
 						<a
 							href="/admin/events"

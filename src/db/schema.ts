@@ -12,6 +12,43 @@ import {
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
+// ── Users ────────────────────────────────────────────────
+
+export const users = pgTable("users", {
+	id: serial("id").primaryKey(),
+	username: text("username").notNull().unique(),
+	passwordHash: text("password_hash").notNull(),
+	createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertUserSchema = createInsertSchema(users, {
+	username: z.string().min(1).max(100),
+	passwordHash: z.string().min(1),
+});
+export type InsertUser = z.infer<typeof insertUserSchema>;
+
+// ── Sessions ─────────────────────────────────────────────
+
+export const sessions = pgTable("sessions", {
+	id: text("id").primaryKey(),
+	userId: integer("user_id")
+		.notNull()
+		.references(() => users.id, { onDelete: "cascade" }),
+	expiresAt: timestamp("expires_at").notNull(),
+	createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const usersRelations = relations(users, ({ many }) => ({
+	sessions: many(sessions),
+}));
+
+export const sessionsRelations = relations(sessions, ({ one }) => ({
+	user: one(users, {
+		fields: [sessions.userId],
+		references: [users.id],
+	}),
+}));
+
 // ── Clients ─────────────────────────────────────────────
 
 export const clients = pgTable("clients", {

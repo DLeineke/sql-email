@@ -12,16 +12,22 @@ export const Layout: FC<LayoutProps> = ({ title, children }) => {
 				<meta charset="UTF-8" />
 				<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 				<title>{title}</title>
-				<script src="https://cdn.tailwindcss.com"></script>
+				<script src="https://cdn.tailwindcss.com" />
 			</head>
 			<body class="bg-slate-900 text-slate-200 min-h-screen">
 				<div class="max-w-5xl mx-auto px-6 py-8">
-					<nav class="flex gap-6 mb-8 text-sm">
+					<nav class="flex gap-6 mb-8 text-sm items-center">
 						<a
 							href="/admin"
 							class="text-slate-400 hover:text-white transition-colors"
 						>
 							Admin
+						</a>
+						<a
+							href="/admin/clients"
+							class="text-slate-400 hover:text-white transition-colors"
+						>
+							Clients
 						</a>
 						<a
 							href="/admin/events"
@@ -35,6 +41,15 @@ export const Layout: FC<LayoutProps> = ({ title, children }) => {
 						>
 							Maintenance
 						</a>
+						<span class="flex-1" />
+						<form method="post" action="/auth/logout">
+							<button
+								type="submit"
+								class="text-slate-400 hover:text-white transition-colors cursor-pointer bg-transparent border-none p-0"
+							>
+								Sign out
+							</button>
+						</form>
 					</nav>
 					{children}
 				</div>
