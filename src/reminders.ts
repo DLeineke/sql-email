@@ -7,7 +7,7 @@ import {
 	events,
 	sentReminders,
 } from "./db/schema";
-import { sendEmail } from "./email";
+import { escapeHtml, sendEmail } from "./email";
 
 interface PendingReminder {
 	eventId: number;
@@ -125,8 +125,8 @@ export async function processReminders() {
 	for (const r of individualReminders) {
 		const subject = `Reminder: "${r.eventTitle}" is in ${r.daysBefore} day(s)`;
 		const html = `
-			<p>Hi${r.clientName ? ` ${r.clientName}` : ""},</p>
-			<p>This is a reminder that <strong>${r.eventTitle}</strong> is coming up in <strong>${r.daysBefore} day(s)</strong> on ${r.eventDate}.</p>
+			<p>Hi${r.clientName ? ` ${escapeHtml(r.clientName)}` : ""},</p>
+			<p>This is a reminder that <strong>${escapeHtml(r.eventTitle)}</strong> is coming up in <strong>${r.daysBefore} day(s)</strong> on ${escapeHtml(r.eventDate)}.</p>
 		`.trim();
 		console.log(`[EMAIL] To: ${r.clientEmail} | ${subject}`);
 		await sendEmail(r.clientEmail, subject, html);
@@ -138,12 +138,12 @@ export async function processReminders() {
 		const itemsHtml = data.reminders
 			.map(
 				(r) =>
-					`<li><strong>${r.eventTitle}</strong> — in ${r.daysBefore} day(s) (${r.eventDate})</li>`,
+					`<li><strong>${escapeHtml(r.eventTitle)}</strong> — in ${r.daysBefore} day(s) (${escapeHtml(r.eventDate)})</li>`,
 			)
 			.join("\n");
 		const subject = `Your daily reminder summary (${data.reminders.length} upcoming)`;
 		const html = `
-			<p>Hi${data.name ? ` ${data.name}` : ""},</p>
+			<p>Hi${data.name ? ` ${escapeHtml(data.name)}` : ""},</p>
 			<p>Here is your daily reminder summary:</p>
 			<ul>${itemsHtml}</ul>
 		`.trim();

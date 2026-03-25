@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 import { Cron } from "croner";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { Hono } from "hono";
+import { csrf } from "hono/csrf";
 import { db } from "./db";
 import { requireAuth } from "./middleware/auth";
 import { processReminders } from "./reminders";
@@ -18,6 +19,9 @@ await migrate(db, {
 console.log("Migrations applied");
 
 const app = new Hono();
+
+// CSRF protection: reject cross-origin form submissions on non-GET/HEAD methods
+app.use("*", csrf());
 
 app.get("/", (c) => c.text("sql-email reminder service"));
 

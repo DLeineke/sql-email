@@ -1,5 +1,17 @@
 import nodemailer from "nodemailer";
 
+const htmlEscapes: Record<string, string> = {
+	"&": "&amp;",
+	"<": "&lt;",
+	">": "&gt;",
+	'"': "&quot;",
+	"'": "&#39;",
+};
+
+export function escapeHtml(str: string): string {
+	return str.replace(/[&<>"']/g, (ch) => htmlEscapes[ch]);
+}
+
 const smtpHost = process.env.SMTP_HOST;
 const smtpPort = Number(process.env.SMTP_PORT) || 587;
 const smtpUser = process.env.SMTP_USER;

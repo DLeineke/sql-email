@@ -4,7 +4,7 @@ import { Hono } from "hono";
 import { Layout } from "../components/Layout";
 import { db } from "../db";
 import { clients, eventClients, eventReminders, events } from "../db/schema";
-import { sendEmail } from "../email";
+import { escapeHtml, sendEmail } from "../email";
 
 export const adminEventRoutes = new Hono();
 
@@ -509,9 +509,9 @@ adminEventRoutes.post("/:id/notify", async (c) => {
 
 	const subject = `Reminder: ${event.title}`;
 	const html = [
-		`<h1>${event.title}</h1>`,
-		`<p><strong>Date:</strong> ${event.eventDate}</p>`,
-		event.description ? `<p>${event.description}</p>` : "",
+		`<h1>${escapeHtml(event.title)}</h1>`,
+		`<p><strong>Date:</strong> ${escapeHtml(event.eventDate)}</p>`,
+		event.description ? `<p>${escapeHtml(event.description)}</p>` : "",
 	].join("\n");
 
 	await Promise.all(
