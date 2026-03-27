@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
 import { Cron } from "croner";
+import { sql } from "drizzle-orm";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { Hono } from "hono";
 import { csrf } from "hono/csrf";
@@ -11,6 +12,7 @@ import { authRoutes } from "./routes/auth";
 import { clientRoutes } from "./routes/clients";
 import { eventRoutes } from "./routes/events";
 import { signupRoutes } from "./routes/signup";
+import { unsubscribeRoutes } from "./routes/unsubscribe";
 
 // Apply pending migrations on startup
 await migrate(db, {
@@ -23,13 +25,69 @@ const app = new Hono();
 // CSRF protection: reject cross-origin form submissions on non-GET/HEAD methods
 app.use("*", csrf());
 
+// Global error handler: JSON for API requests, HTML for browser requests
+app.onError((err, c) => {
+	console.error(`[error] ${c.req.method} ${c.req.path}:`, err);
+	const accept = c.req.header("accept") ?? "";
+	const wantsJson =
+		accept.includes("application/json") ||
+		c.req.path.startsWith("/clients") ||
+		c.req.path.startsWith("/events") ||
+		c.req.path.startsWith("/reminders");
+	if (wantsJson) {
+		return c.json({ error: "Internal server error" }, 500);
+	}
+	return c.html(
+		`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Error</title></head><body><h1>Something went wrong</h1><p>An unexpected error occurred. Please try again later.</p></body></html>`,
+		500,
+	);
+});
+
+// Not-found handler: JSON for API requests, HTML for browser requests
+app.notFound((c) => {
+	const accept = c.req.header("accept") ?? "";
+	const wantsJson =
+		accept.includes("application/json") ||
+		c.req.path.startsWith("/clients") ||
+		c.req.path.startsWith("/events") ||
+		c.req.path.startsWith("/reminders");
+	if (wantsJson) {
+		return c.json({ error: "Not found" }, 404);
+	}
+	return c.html(
+		`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Not Found</title></head><body style="background:#0f172a;color:#e2e8f0;padding:2rem;font-family:system-ui;"><h1>Page not found</h1><p><a href="/admin" style="color:#3b82f6;">Go to Admin</a></p></body></html>`,
+		404,
+	);
+});
+
 app.get("/", (c) => c.text("sql-email reminder service"));
+
+// Health check (public)
+const startedAt = new Date();
+app.get("/health", async (c) => {
+	let dbOk = false;
+	try {
+		await db.execute(sql`SELECT 1`);
+		dbOk = true;
+	} catch {
+		// db unreachable
+	}
+	const uptimeSeconds = Math.floor((Date.now() - startedAt.getTime()) / 1000);
+	const status = dbOk ? "ok" : "degraded";
+	return c.json(
+		{ status, db: dbOk ? "ok" : "error", uptimeSeconds },
+		dbOk ? 200 : 503,
+	);
+});
 
 // Auth routes (public)
 app.route("/auth", authRoutes);
 
 // Public signup
 app.route("/signup", signupRoutes);
+
+// Public unsubscribe (token-based, no login required)
+app.route("/unsubscribe", unsubscribeRoutes);
 
 // Protected: admin UI
 app.use("/admin/*", requireAuth);

@@ -7,6 +7,7 @@ import {
 	events,
 	insertEventSchema,
 } from "../db/schema";
+import { parseIntParam } from "../lib/params";
 
 export const eventRoutes = new Hono();
 
@@ -53,7 +54,8 @@ eventRoutes.post("/", async (c) => {
 });
 
 eventRoutes.get("/:id", async (c) => {
-	const id = Number(c.req.param("id"));
+	const id = parseIntParam(c.req.param("id"));
+	if (id === null) return c.json({ error: "Not found" }, 404);
 	const event = await db.query.events.findFirst({
 		where: eq(events.id, id),
 		with: { reminders: true, eventClients: true },
@@ -63,7 +65,8 @@ eventRoutes.get("/:id", async (c) => {
 });
 
 eventRoutes.delete("/:id", async (c) => {
-	const id = Number(c.req.param("id"));
+	const id = parseIntParam(c.req.param("id"));
+	if (id === null) return c.json({ error: "Not found" }, 404);
 	const [deleted] = await db
 		.delete(events)
 		.where(eq(events.id, id))

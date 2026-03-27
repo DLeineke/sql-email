@@ -9,6 +9,32 @@ import {
 } from "./db/schema";
 import { escapeHtml, sendEmail } from "./email";
 
+const reminderTimezone = process.env.TZ_REMINDERS ?? "UTC";
+
+/** Returns today's date string (YYYY-MM-DD) in the configured reminder timezone. */
+function todayInTimezone(): string {
+	return new Intl.DateTimeFormat("en-CA", {
+		timeZone: reminderTimezone,
+		year: "numeric",
+		month: "2-digit",
+		day: "2-digit",
+	}).format(new Date());
+}
+
+const appBaseUrl =
+	process.env.APP_BASE_URL?.replace(/\/$/, "") ?? "http://localhost:3001";
+
+function unsubscribeLink(token: string | null): string {
+	if (!token) return "";
+	return `${appBaseUrl}/unsubscribe/${encodeURIComponent(token)}`;
+}
+
+function unsubscribeFooter(token: string | null): string {
+	if (!token) return "";
+	const link = unsubscribeLink(token);
+	return `<p style="margin-top:24px;font-size:12px;color:#888;">Don't want these emails? <a href="${escapeHtml(link)}">Unsubscribe</a>.</p>`;
+}
+
 interface PendingReminder {
 	eventId: number;
 	eventTitle: string;
@@ -18,13 +44,14 @@ interface PendingReminder {
 	clientId: number;
 	clientEmail: string;
 	clientName: string | null;
+	unsubscribeToken: string | null;
 }
 
 /**
  * Find all reminders that should be sent today and haven't been sent yet.
  */
 export async function getPendingReminders(): Promise<PendingReminder[]> {
-	const today = new Date().toISOString().split("T")[0];
+	const today = todayInTimezone();
 
 	const results = await db
 		.select({
@@ -36,6 +63,7 @@ export async function getPendingReminders(): Promise<PendingReminder[]> {
 			clientId: clients.id,
 			clientEmail: clients.email,
 			clientName: clients.name,
+			unsubscribeToken: clients.unsubscribeToken,
 		})
 		.from(eventReminders)
 		.innerJoin(events, eq(eventReminders.eventId, events.id))
@@ -59,6 +87,8 @@ export async function getPendingReminders(): Promise<PendingReminder[]> {
 							),
 					),
 				),
+				// exclude unsubscribed clients
+				sql`${clients.unsubscribedAt} IS NULL`,
 			),
 		);
 
@@ -91,7 +121,12 @@ export async function processReminders() {
 	// Separate summary vs individual clients
 	const summaryClients = new Map<
 		number,
-		{ email: string; name: string | null; reminders: PendingReminder[] }
+		{
+			email: string;
+			name: string | null;
+			unsubscribeToken: string | null;
+			reminders: PendingReminder[];
+		}
 	>();
 	const individualReminders: PendingReminder[] = [];
 
@@ -112,6 +147,7 @@ export async function processReminders() {
 				summaryClients.set(reminder.clientId, {
 					email: reminder.clientEmail,
 					name: reminder.clientName,
+					unsubscribeToken: reminder.unsubscribeToken,
 					reminders: [],
 				});
 			}
@@ -127,6 +163,7 @@ export async function processReminders() {
 		const html = `
 			<p>Hi${r.clientName ? ` ${escapeHtml(r.clientName)}` : ""},</p>
 			<p>This is a reminder that <strong>${escapeHtml(r.eventTitle)}</strong> is coming up in <strong>${r.daysBefore} day(s)</strong> on ${escapeHtml(r.eventDate)}.</p>
+			${unsubscribeFooter(r.unsubscribeToken)}
 		`.trim();
 		console.log(`[EMAIL] To: ${r.clientEmail} | ${subject}`);
 		await sendEmail(r.clientEmail, subject, html);
@@ -146,6 +183,7 @@ export async function processReminders() {
 			<p>Hi${data.name ? ` ${escapeHtml(data.name)}` : ""},</p>
 			<p>Here is your daily reminder summary:</p>
 			<ul>${itemsHtml}</ul>
+			${unsubscribeFooter(data.unsubscribeToken)}
 		`.trim();
 		console.log(
 			`[SUMMARY EMAIL] To: ${data.email} | ${data.reminders.length} reminder(s)`,

@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { Layout } from "../components/Layout";
 import { db } from "../db";
 import { clients, updateClientSchema } from "../db/schema";
+import { parseIntParam } from "../lib/params";
 
 export const adminClientRoutes = new Hono();
 
@@ -102,7 +103,14 @@ adminClientRoutes.get("/", async (c) => {
 
 // GET /admin/clients/:id — client detail
 adminClientRoutes.get("/:id", async (c) => {
-	const id = Number(c.req.param("id"));
+	const id = parseIntParam(c.req.param("id"));
+	if (id === null)
+		return c.html(
+			<Layout title="Not Found - sql-email">
+				<p class="text-slate-400">Client not found.</p>
+			</Layout>,
+			404,
+		);
 	const client = await db.query.clients.findFirst({
 		where: eq(clients.id, id),
 		with: { eventClients: { with: { event: true } } },
@@ -223,7 +231,14 @@ adminClientRoutes.get("/:id", async (c) => {
 
 // GET /admin/clients/:id/edit — edit form
 adminClientRoutes.get("/:id/edit", async (c) => {
-	const id = Number(c.req.param("id"));
+	const id = parseIntParam(c.req.param("id"));
+	if (id === null)
+		return c.html(
+			<Layout title="Not Found - sql-email">
+				<p class="text-slate-400">Client not found.</p>
+			</Layout>,
+			404,
+		);
 	const client = await db
 		.select()
 		.from(clients)
@@ -317,7 +332,8 @@ adminClientRoutes.get("/:id/edit", async (c) => {
 
 // POST /admin/clients/:id/edit — handle edit form submission
 adminClientRoutes.post("/:id/edit", async (c) => {
-	const id = Number(c.req.param("id"));
+	const id = parseIntParam(c.req.param("id"));
+	if (id === null) return c.redirect("/admin/clients");
 	const form = await c.req.formData();
 
 	const nameRaw = (form.get("name") as string | null)?.trim() || null;
@@ -353,7 +369,8 @@ adminClientRoutes.post("/:id/edit", async (c) => {
 
 // POST /admin/clients/:id/delete — delete client
 adminClientRoutes.post("/:id/delete", async (c) => {
-	const id = Number(c.req.param("id"));
+	const id = parseIntParam(c.req.param("id"));
+	if (id === null) return c.redirect("/admin/clients");
 	await db.delete(clients).where(eq(clients.id, id));
 	return c.redirect("/admin/clients");
 });

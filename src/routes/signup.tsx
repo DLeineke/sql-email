@@ -144,7 +144,8 @@ signupRoutes.post("/", async (c) => {
 	}
 
 	try {
-		await db.insert(clients).values(parsed.data);
+		const unsubscribeToken = crypto.randomUUID();
+		await db.insert(clients).values({ ...parsed.data, unsubscribeToken });
 	} catch {
 		return c.html(
 			<SignupForm

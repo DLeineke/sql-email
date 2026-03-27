@@ -5,6 +5,7 @@ import { Layout } from "../components/Layout";
 import { db } from "../db";
 import { clients, eventClients, eventReminders, events } from "../db/schema";
 import { escapeHtml, sendEmail } from "../email";
+import { parseIntParam } from "../lib/params";
 
 export const adminEventRoutes = new Hono();
 
@@ -233,7 +234,14 @@ adminEventRoutes.post("/", async (c) => {
 
 // GET /admin/events/:id — event detail
 adminEventRoutes.get("/:id", async (c) => {
-	const id = Number(c.req.param("id"));
+	const id = parseIntParam(c.req.param("id"));
+	if (id === null)
+		return c.html(
+			<Layout title="Not Found - sql-email">
+				<p class="text-slate-400">Event not found.</p>
+			</Layout>,
+			404,
+		);
 
 	const event = await db.query.events.findFirst({
 		where: eq(events.id, id),
@@ -329,16 +337,28 @@ adminEventRoutes.get("/:id", async (c) => {
 							</tr>
 						</thead>
 						<tbody>
-							{event.eventClients.map((ec) => (
-								<tr key={ec.id}>
-									<td class="px-4 py-2 border-b border-slate-700 text-sm">
-										{ec.client.name ?? "-"}
-									</td>
-									<td class="px-4 py-2 border-b border-slate-700 text-sm text-slate-400">
-										{ec.client.email}
-									</td>
-								</tr>
-							))}
+							{event.eventClients.map((ec) => {
+								const unsub = ec.client.unsubscribedAt !== null;
+								return (
+									<tr key={ec.id}>
+										<td
+											class={`px-4 py-2 border-b border-slate-700 text-sm${unsub ? " text-slate-500" : ""}`}
+										>
+											{ec.client.name ?? "-"}
+											{unsub && (
+												<span class="px-2 py-0.5 rounded text-xs font-semibold bg-red-950 text-red-400 ml-2">
+													Unsubscribed
+												</span>
+											)}
+										</td>
+										<td
+											class={`px-4 py-2 border-b border-slate-700 text-sm${unsub ? " text-slate-500" : " text-slate-400"}`}
+										>
+											{ec.client.email}
+										</td>
+									</tr>
+								);
+							})}
 						</tbody>
 					</table>
 				)}
@@ -377,7 +397,14 @@ adminEventRoutes.get("/:id", async (c) => {
 
 // GET /admin/events/:id/edit — edit form
 adminEventRoutes.get("/:id/edit", async (c) => {
-	const id = Number(c.req.param("id"));
+	const id = parseIntParam(c.req.param("id"));
+	if (id === null)
+		return c.html(
+			<Layout title="Not Found - sql-email">
+				<p class="text-slate-400">Event not found.</p>
+			</Layout>,
+			404,
+		);
 
 	const event = await db.query.events.findFirst({
 		where: eq(events.id, id),
@@ -452,7 +479,8 @@ adminEventRoutes.get("/:id/edit", async (c) => {
 
 // POST /admin/events/:id/edit — handle edit form submission
 adminEventRoutes.post("/:id/edit", async (c) => {
-	const id = Number(c.req.param("id"));
+	const id = parseIntParam(c.req.param("id"));
+	if (id === null) return c.redirect("/admin/events");
 	const form = await c.req.formData();
 	const parsed = parseEventForm(form);
 
@@ -496,7 +524,8 @@ adminEventRoutes.post("/:id/edit", async (c) => {
 
 // POST /admin/events/:id/notify — send immediate notification to all assigned clients
 adminEventRoutes.post("/:id/notify", async (c) => {
-	const id = Number(c.req.param("id"));
+	const id = parseIntParam(c.req.param("id"));
+	if (id === null) return c.redirect("/admin/events");
 
 	const event = await db.query.events.findFirst({
 		where: eq(events.id, id),
@@ -507,25 +536,38 @@ adminEventRoutes.post("/:id/notify", async (c) => {
 		return c.redirect("/admin/events");
 	}
 
+	const baseUrl = (process.env.APP_BASE_URL ?? "http://localhost:3001").replace(
+		/\/$/,
+		"",
+	);
 	const subject = `Reminder: ${event.title}`;
-	const html = [
-		`<h1>${escapeHtml(event.title)}</h1>`,
-		`<p><strong>Date:</strong> ${escapeHtml(event.eventDate)}</p>`,
-		event.description ? `<p>${escapeHtml(event.description)}</p>` : "",
-	].join("\n");
+
+	const activeClients = event.eventClients.filter(
+		(ec) => ec.client.unsubscribedAt === null,
+	);
 
 	await Promise.all(
-		event.eventClients.map((ec) => sendEmail(ec.client.email, subject, html)),
+		activeClients.map((ec) => {
+			const unsubscribeFooter = ec.client.unsubscribeToken
+				? `<p style="margin-top:2rem;font-size:0.8rem;color:#666;"><a href="${escapeHtml(`${baseUrl}/unsubscribe/${ec.client.unsubscribeToken}`)}">Unsubscribe</a></p>`
+				: "";
+			const html = [
+				`<h1>${escapeHtml(event.title)}</h1>`,
+				`<p><strong>Date:</strong> ${escapeHtml(event.eventDate)}</p>`,
+				event.description ? `<p>${escapeHtml(event.description)}</p>` : "",
+				unsubscribeFooter,
+			].join("\n");
+			return sendEmail(ec.client.email, subject, html);
+		}),
 	);
 
-	return c.redirect(
-		`/admin/events/${id}?notified=${event.eventClients.length}`,
-	);
+	return c.redirect(`/admin/events/${id}?notified=${activeClients.length}`);
 });
 
 // POST /admin/events/:id/delete — delete event
 adminEventRoutes.post("/:id/delete", async (c) => {
-	const id = Number(c.req.param("id"));
+	const id = parseIntParam(c.req.param("id"));
+	if (id === null) return c.redirect("/admin/events");
 	await db.delete(events).where(eq(events.id, id));
 	return c.redirect("/admin/events");
 });

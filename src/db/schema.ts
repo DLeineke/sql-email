@@ -56,6 +56,8 @@ export const clients = pgTable("clients", {
 	email: text("email").notNull().unique(),
 	name: text("name"),
 	wantsDailySummary: boolean("wants_daily_summary").default(false).notNull(),
+	unsubscribeToken: text("unsubscribe_token").unique(),
+	unsubscribedAt: timestamp("unsubscribed_at"),
 	createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

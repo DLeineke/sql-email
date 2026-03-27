@@ -16,5 +16,13 @@
       "tag": "20260324000000_add_auth",
       "breakpoints": true
     }
+    ,
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1774684800000,
+      "tag": "20260325000000_add_unsubscribe_token",
+      "breakpoints": true
+    }
   ]
 }
