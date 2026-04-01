@@ -36,6 +36,12 @@ export const Layout: FC<LayoutProps> = ({ title, children }) => {
 							Events
 						</a>
 						<a
+							href="/admin/reminders"
+							class="text-slate-400 hover:text-white transition-colors"
+						>
+							Reminders
+						</a>
+						<a
 							href="/admin/maintenance"
 							class="text-slate-400 hover:text-white transition-colors"
 						>

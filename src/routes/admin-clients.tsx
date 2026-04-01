@@ -1,11 +1,27 @@
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { Layout } from "../components/Layout";
+import {
+	Badge,
+	Button,
+	Card,
+	LinkButton,
+	Table,
+	Td,
+	TdPlain,
+	Th,
+} from "../components/ui";
 import { db } from "../db";
 import { clients, updateClientSchema } from "../db/schema";
 import { parseIntParam } from "../lib/params";
 
 export const adminClientRoutes = new Hono();
+
+const NotFound = () => (
+	<Layout title="Not Found - sql-email">
+		<p class="text-slate-400">Client not found.</p>
+	</Layout>
+);
 
 // GET /admin/clients — list all clients
 adminClientRoutes.get("/", async (c) => {
@@ -13,63 +29,42 @@ adminClientRoutes.get("/", async (c) => {
 
 	return c.html(
 		<Layout title="Clients - sql-email">
-			<div class="flex items-center justify-between mb-6">
-				<h1 class="text-2xl font-bold text-white">Clients</h1>
-			</div>
+			<h1 class="text-2xl font-bold text-white mb-6">Clients</h1>
 
-			<div class="bg-slate-800 rounded-lg p-6">
-				<h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">
-					All Clients
-				</h2>
+			<Card title="All Clients">
 				{rows.length === 0 ? (
 					<p class="text-slate-500 text-sm">No clients yet.</p>
 				) : (
-					<table class="w-full border-collapse">
+					<Table>
 						<thead>
 							<tr>
-								<th class="text-left text-xs text-slate-500 uppercase tracking-wide px-4 py-2 border-b border-slate-700">
-									Name
-								</th>
-								<th class="text-left text-xs text-slate-500 uppercase tracking-wide px-4 py-2 border-b border-slate-700">
-									Email
-								</th>
-								<th class="text-left text-xs text-slate-500 uppercase tracking-wide px-4 py-2 border-b border-slate-700">
-									Daily Summary
-								</th>
-								<th class="text-left text-xs text-slate-500 uppercase tracking-wide px-4 py-2 border-b border-slate-700">
-									Joined
-								</th>
+								<Th>Name</Th>
+								<Th>Email</Th>
+								<Th>Daily Summary</Th>
+								<Th>Joined</Th>
 								<th class="px-4 py-2 border-b border-slate-700" />
 							</tr>
 						</thead>
 						<tbody>
 							{rows.map((cl) => (
 								<tr key={cl.id}>
-									<td class="px-4 py-2 border-b border-slate-700 text-sm">
+									<TdPlain>
 										<a
 											href={`/admin/clients/${cl.id}`}
 											class="text-blue-400 hover:text-blue-300 transition-colors"
 										>
 											{cl.name ?? <span class="text-slate-500 italic">—</span>}
 										</a>
-									</td>
-									<td class="px-4 py-2 border-b border-slate-700 text-sm text-slate-400">
-										{cl.email}
-									</td>
-									<td class="px-4 py-2 border-b border-slate-700 text-sm">
+									</TdPlain>
+									<Td>{cl.email}</Td>
+									<TdPlain>
 										{cl.wantsDailySummary ? (
-											<span class="px-2 py-0.5 rounded text-xs font-semibold bg-green-950 text-green-400">
-												Yes
-											</span>
+											<Badge variant="green">Yes</Badge>
 										) : (
-											<span class="px-2 py-0.5 rounded text-xs font-semibold bg-slate-700 text-slate-400">
-												No
-											</span>
+											<Badge variant="gray">No</Badge>
 										)}
-									</td>
-									<td class="px-4 py-2 border-b border-slate-700 text-sm text-slate-400">
-										{new Date(cl.createdAt).toISOString().slice(0, 10)}
-									</td>
+									</TdPlain>
+									<Td>{new Date(cl.createdAt).toISOString().slice(0, 10)}</Td>
 									<td class="px-4 py-2 border-b border-slate-700 text-sm text-right">
 										<a
 											href={`/admin/clients/${cl.id}/edit`}
@@ -94,9 +89,9 @@ adminClientRoutes.get("/", async (c) => {
 								</tr>
 							))}
 						</tbody>
-					</table>
+					</Table>
 				)}
-			</div>
+			</Card>
 		</Layout>,
 	);
 });
@@ -104,26 +99,14 @@ adminClientRoutes.get("/", async (c) => {
 // GET /admin/clients/:id — client detail
 adminClientRoutes.get("/:id", async (c) => {
 	const id = parseIntParam(c.req.param("id"));
-	if (id === null)
-		return c.html(
-			<Layout title="Not Found - sql-email">
-				<p class="text-slate-400">Client not found.</p>
-			</Layout>,
-			404,
-		);
+	if (id === null) return c.html(<NotFound />, 404);
+
 	const client = await db.query.clients.findFirst({
 		where: eq(clients.id, id),
 		with: { eventClients: { with: { event: true } } },
 	});
 
-	if (!client) {
-		return c.html(
-			<Layout title="Not Found - sql-email">
-				<p class="text-slate-400">Client not found.</p>
-			</Layout>,
-			404,
-		);
-	}
+	if (!client) return c.html(<NotFound />, 404);
 
 	return c.html(
 		<Layout title={`${client.email} - sql-email`}>
@@ -131,18 +114,10 @@ adminClientRoutes.get("/:id", async (c) => {
 				<h1 class="text-2xl font-bold text-white">
 					{client.name ?? client.email}
 				</h1>
-				<a
-					href={`/admin/clients/${client.id}/edit`}
-					class="bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors"
-				>
-					Edit
-				</a>
+				<LinkButton href={`/admin/clients/${client.id}/edit`}>Edit</LinkButton>
 			</div>
 
-			<div class="bg-slate-800 rounded-lg p-6 mb-4">
-				<h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">
-					Details
-				</h2>
+			<Card title="Details" class="mb-4">
 				<dl class="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2">
 					<dt class="text-sm text-slate-500">Email</dt>
 					<dd class="text-sm">{client.email}</dd>
@@ -153,13 +128,9 @@ adminClientRoutes.get("/:id", async (c) => {
 					<dt class="text-sm text-slate-500">Daily Summary</dt>
 					<dd class="text-sm">
 						{client.wantsDailySummary ? (
-							<span class="px-2 py-0.5 rounded text-xs font-semibold bg-green-950 text-green-400">
-								Yes
-							</span>
+							<Badge variant="green">Yes</Badge>
 						) : (
-							<span class="px-2 py-0.5 rounded text-xs font-semibold bg-slate-700 text-slate-400">
-								No
-							</span>
+							<Badge variant="gray">No</Badge>
 						)}
 					</dd>
 					<dt class="text-sm text-slate-500">Joined</dt>
@@ -167,64 +138,47 @@ adminClientRoutes.get("/:id", async (c) => {
 						{new Date(client.createdAt).toISOString()}
 					</dd>
 				</dl>
-			</div>
+			</Card>
 
-			<div class="bg-slate-800 rounded-lg p-6 mb-4">
-				<h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">
-					Assigned Events
-				</h2>
+			<Card title="Assigned Events" class="mb-4">
 				{client.eventClients.length === 0 ? (
 					<p class="text-slate-500 text-sm">Not assigned to any events.</p>
 				) : (
-					<table class="w-full border-collapse">
+					<Table>
 						<thead>
 							<tr>
-								<th class="text-left text-xs text-slate-500 uppercase tracking-wide px-4 py-2 border-b border-slate-700">
-									Event
-								</th>
-								<th class="text-left text-xs text-slate-500 uppercase tracking-wide px-4 py-2 border-b border-slate-700">
-									Date
-								</th>
+								<Th>Event</Th>
+								<Th>Date</Th>
 							</tr>
 						</thead>
 						<tbody>
 							{client.eventClients.map((ec) => (
 								<tr key={ec.id}>
-									<td class="px-4 py-2 border-b border-slate-700 text-sm">
+									<TdPlain>
 										<a
 											href={`/admin/events/${ec.event.id}`}
 											class="text-blue-400 hover:text-blue-300 transition-colors"
 										>
 											{ec.event.title}
 										</a>
-									</td>
-									<td class="px-4 py-2 border-b border-slate-700 text-sm text-slate-400">
-										{ec.event.eventDate}
-									</td>
+									</TdPlain>
+									<Td>{ec.event.eventDate}</Td>
 								</tr>
 							))}
 						</tbody>
-					</table>
+					</Table>
 				)}
-			</div>
+			</Card>
 
-			<div class="bg-slate-800 rounded-lg p-6">
-				<h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">
-					Actions
-				</h2>
+			<Card title="Actions">
 				<form
 					method="post"
 					action={`/admin/clients/${client.id}/delete`}
 					onsubmit="return confirm('Delete this client and all their reminder records?')"
 				>
-					<button
-						type="submit"
-						class="bg-red-600 hover:bg-red-700 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors cursor-pointer"
-					>
-						Delete Client
-					</button>
+					<Button variant="danger">Delete Client</Button>
 				</form>
-			</div>
+			</Card>
 		</Layout>,
 	);
 });
@@ -232,27 +186,15 @@ adminClientRoutes.get("/:id", async (c) => {
 // GET /admin/clients/:id/edit — edit form
 adminClientRoutes.get("/:id/edit", async (c) => {
 	const id = parseIntParam(c.req.param("id"));
-	if (id === null)
-		return c.html(
-			<Layout title="Not Found - sql-email">
-				<p class="text-slate-400">Client not found.</p>
-			</Layout>,
-			404,
-		);
+	if (id === null) return c.html(<NotFound />, 404);
+
 	const client = await db
 		.select()
 		.from(clients)
 		.where(eq(clients.id, id))
 		.then((r) => r[0]);
 
-	if (!client) {
-		return c.html(
-			<Layout title="Not Found - sql-email">
-				<p class="text-slate-400">Client not found.</p>
-			</Layout>,
-			404,
-		);
-	}
+	if (!client) return c.html(<NotFound />, 404);
 
 	const error = c.req.query("error");
 
@@ -266,7 +208,7 @@ adminClientRoutes.get("/:id/edit", async (c) => {
 				</div>
 			)}
 
-			<div class="bg-slate-800 rounded-lg p-6">
+			<Card>
 				<form method="post" action={`/admin/clients/${client.id}/edit`}>
 					<div class="mb-4">
 						<label for="name" class="block text-sm text-slate-400 mb-1">
@@ -311,21 +253,11 @@ adminClientRoutes.get("/:id/edit", async (c) => {
 					</div>
 
 					<div class="flex gap-3">
-						<button
-							type="submit"
-							class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors cursor-pointer"
-						>
-							Save Changes
-						</button>
-						<a
-							href={`/admin/clients/${client.id}`}
-							class="bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors"
-						>
-							Cancel
-						</a>
+						<Button>Save Changes</Button>
+						<LinkButton href={`/admin/clients/${client.id}`}>Cancel</LinkButton>
 					</div>
 				</form>
-			</div>
+			</Card>
 		</Layout>,
 	);
 });

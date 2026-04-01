@@ -3,9 +3,11 @@ import { resolve } from "node:path";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { Hono } from "hono";
 import { Layout } from "../components/Layout";
+import { Badge, Button, Card, Table, Td, TdPlain, Th } from "../components/ui";
 import { db } from "../db";
 import { adminClientRoutes } from "./admin-clients";
 import { adminEventRoutes } from "./admin-events";
+import { adminReminderRoutes } from "./admin-reminders";
 
 interface JournalEntry {
 	idx: number;
@@ -44,15 +46,13 @@ export const adminRoutes = new Hono();
 
 adminRoutes.route("/clients", adminClientRoutes);
 adminRoutes.route("/events", adminEventRoutes);
+adminRoutes.route("/reminders", adminReminderRoutes);
 
 adminRoutes.get("/", (c) => {
 	return c.html(
 		<Layout title="Admin - sql-email">
 			<h1 class="text-2xl font-bold text-white mb-6">Admin Dashboard</h1>
-			<div class="bg-slate-800 rounded-lg p-6">
-				<h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">
-					Quick Links
-				</h2>
+			<Card title="Quick Links">
 				<ul class="space-y-2">
 					<li>
 						<a
@@ -79,7 +79,7 @@ adminRoutes.get("/", (c) => {
 						</a>
 					</li>
 				</ul>
-			</div>
+			</Card>
 		</Layout>,
 	);
 });
@@ -103,11 +103,7 @@ adminRoutes.get("/maintenance", async (c) => {
 		<Layout title="Maintenance - sql-email">
 			<h1 class="text-2xl font-bold text-white mb-6">Maintenance</h1>
 
-			<div class="bg-slate-800 rounded-lg p-6">
-				<h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">
-					Migrations
-				</h2>
-
+			<Card title="Migrations">
 				<div class="flex gap-8 mb-6">
 					<div class="text-center">
 						<div class="text-3xl font-bold text-white">{total}</div>
@@ -129,62 +125,39 @@ adminRoutes.get("/maintenance", async (c) => {
 					</div>
 				</div>
 
-				<table class="w-full border-collapse">
+				<Table>
 					<thead>
 						<tr>
-							<th class="text-left text-xs text-slate-500 uppercase tracking-wide px-4 py-2 border-b border-slate-700">
-								Migration
-							</th>
-							<th class="text-left text-xs text-slate-500 uppercase tracking-wide px-4 py-2 border-b border-slate-700">
-								Generated
-							</th>
-							<th class="text-left text-xs text-slate-500 uppercase tracking-wide px-4 py-2 border-b border-slate-700">
-								Status
-							</th>
-							<th class="text-left text-xs text-slate-500 uppercase tracking-wide px-4 py-2 border-b border-slate-700">
-								Applied At
-							</th>
+							<Th>Migration</Th>
+							<Th>Generated</Th>
+							<Th>Status</Th>
+							<Th>Applied At</Th>
 						</tr>
 					</thead>
 					<tbody>
 						{migrations.map((m) => (
 							<tr key={m.tag}>
-								<td class="px-4 py-2 border-b border-slate-700 text-sm">
-									{m.tag}
-								</td>
-								<td class="px-4 py-2 border-b border-slate-700 text-sm text-slate-400">
-									{m.generatedAt}
-								</td>
-								<td class="px-4 py-2 border-b border-slate-700 text-sm">
+								<TdPlain>{m.tag}</TdPlain>
+								<Td>{m.generatedAt}</Td>
+								<TdPlain>
 									{m.applied ? (
-										<span class="px-2 py-0.5 rounded text-xs font-semibold bg-green-950 text-green-400">
-											Applied
-										</span>
+										<Badge variant="green">Applied</Badge>
 									) : (
-										<span class="px-2 py-0.5 rounded text-xs font-semibold bg-yellow-950 text-yellow-400">
-											Pending
-										</span>
+										<Badge variant="yellow">Pending</Badge>
 									)}
-								</td>
-								<td class="px-4 py-2 border-b border-slate-700 text-sm text-slate-400">
-									{m.appliedAt ?? "-"}
-								</td>
+								</TdPlain>
+								<Td>{m.appliedAt ?? "-"}</Td>
 							</tr>
 						))}
 					</tbody>
-				</table>
+				</Table>
 
 				{pendingCount > 0 && (
 					<form method="post" action="/admin/maintenance/migrate" class="mt-4">
-						<button
-							type="submit"
-							class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors cursor-pointer"
-						>
-							Apply Pending Migrations
-						</button>
+						<Button>Apply Pending Migrations</Button>
 					</form>
 				)}
-			</div>
+			</Card>
 		</Layout>,
 	);
 });

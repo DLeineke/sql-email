@@ -1,10 +1,27 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 
 import { Layout } from "../components/Layout";
+import {
+	Badge,
+	Button,
+	Card,
+	LinkButton,
+	Table,
+	Td,
+	TdPlain,
+	Th,
+} from "../components/ui";
 import { db } from "../db";
-import { clients, eventClients, eventReminders, events } from "../db/schema";
-import { escapeHtml, sendEmail } from "../email";
+import {
+	clients,
+	eventClients,
+	eventReminders,
+	events,
+	sentReminders,
+} from "../db/schema";
+import { sendEmail } from "../email";
+import { notifyEmail } from "../lib/email-templates";
 import { parseIntParam } from "../lib/params";
 
 export const adminEventRoutes = new Hono();
@@ -93,64 +110,44 @@ adminEventRoutes.get("/", async (c) => {
 		<Layout title="Events - sql-email">
 			<div class="flex items-center justify-between mb-6">
 				<h1 class="text-2xl font-bold text-white">Events</h1>
-				<a
-					href="/admin/events/new"
-					class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors"
-				>
+				<LinkButton href="/admin/events/new" variant="primary">
 					New Event
-				</a>
+				</LinkButton>
 			</div>
 
-			<div class="bg-slate-800 rounded-lg p-6">
-				<h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">
-					All Events
-				</h2>
+			<Card title="All Events">
 				{rows.length === 0 ? (
 					<p class="text-slate-500 text-sm">No events yet.</p>
 				) : (
-					<table class="w-full border-collapse">
+					<Table>
 						<thead>
 							<tr>
-								<th class="text-left text-xs text-slate-500 uppercase tracking-wide px-4 py-2 border-b border-slate-700">
-									Title
-								</th>
-								<th class="text-left text-xs text-slate-500 uppercase tracking-wide px-4 py-2 border-b border-slate-700">
-									Event Date
-								</th>
-								<th class="text-left text-xs text-slate-500 uppercase tracking-wide px-4 py-2 border-b border-slate-700">
-									Reminders
-								</th>
-								<th class="text-left text-xs text-slate-500 uppercase tracking-wide px-4 py-2 border-b border-slate-700">
-									Clients
-								</th>
+								<Th>Title</Th>
+								<Th>Event Date</Th>
+								<Th>Reminders</Th>
+								<Th>Clients</Th>
 							</tr>
 						</thead>
 						<tbody>
 							{rows.map((e) => (
 								<tr key={e.id}>
-									<td class="px-4 py-2 border-b border-slate-700 text-sm">
+									<TdPlain>
 										<a
 											href={`/admin/events/${e.id}`}
 											class="text-blue-400 hover:text-blue-300 transition-colors"
 										>
 											{e.title}
 										</a>
-									</td>
-									<td class="px-4 py-2 border-b border-slate-700 text-sm text-slate-400">
-										{e.eventDate}
-									</td>
-									<td class="px-4 py-2 border-b border-slate-700 text-sm text-slate-400">
-										{e.reminderCount}
-									</td>
-									<td class="px-4 py-2 border-b border-slate-700 text-sm text-slate-400">
-										{e.clientCount}
-									</td>
+									</TdPlain>
+									<Td>{e.eventDate}</Td>
+									<Td>{e.reminderCount}</Td>
+									<Td>{e.clientCount}</Td>
 								</tr>
 							))}
 						</tbody>
-					</table>
+					</Table>
 				)}
-			</div>
+			</Card>
 		</Layout>,
 	);
 });
@@ -174,17 +171,12 @@ adminEventRoutes.get("/new", async (c) => {
 				</div>
 			)}
 
-			<div class="bg-slate-800 rounded-lg p-6">
+			<Card>
 				<form method="post" action="/admin/events">
 					<EventFormFields allClients={allClients} />
-					<button
-						type="submit"
-						class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors cursor-pointer"
-					>
-						Create Event
-					</button>
+					<Button>Create Event</Button>
 				</form>
-			</div>
+			</Card>
 		</Layout>,
 	);
 });
@@ -268,18 +260,10 @@ adminEventRoutes.get("/:id", async (c) => {
 			)}
 			<div class="flex items-center justify-between mb-6">
 				<h1 class="text-2xl font-bold text-white">{event.title}</h1>
-				<a
-					href={`/admin/events/${event.id}/edit`}
-					class="bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors"
-				>
-					Edit
-				</a>
+				<LinkButton href={`/admin/events/${event.id}/edit`}>Edit</LinkButton>
 			</div>
 
-			<div class="bg-slate-800 rounded-lg p-6 mb-4">
-				<h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">
-					Details
-				</h2>
+			<Card title="Details" class="mb-4">
 				<dl class="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2">
 					<dt class="text-sm text-slate-500">Title</dt>
 					<dd class="text-sm">{event.title}</dd>
@@ -296,12 +280,9 @@ adminEventRoutes.get("/:id", async (c) => {
 						{new Date(event.createdAt).toISOString()}
 					</dd>
 				</dl>
-			</div>
+			</Card>
 
-			<div class="bg-slate-800 rounded-lg p-6 mb-4">
-				<h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">
-					Reminder Schedule
-				</h2>
+			<Card title="Reminder Schedule" class="mb-4">
 				{event.reminders.length === 0 ? (
 					<p class="text-slate-500 text-sm">No reminders configured.</p>
 				) : (
@@ -316,24 +297,17 @@ adminEventRoutes.get("/:id", async (c) => {
 						))}
 					</div>
 				)}
-			</div>
+			</Card>
 
-			<div class="bg-slate-800 rounded-lg p-6 mb-4">
-				<h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">
-					Assigned Clients
-				</h2>
+			<Card title="Assigned Clients" class="mb-4">
 				{event.eventClients.length === 0 ? (
 					<p class="text-slate-500 text-sm">No clients assigned.</p>
 				) : (
-					<table class="w-full border-collapse">
+					<Table>
 						<thead>
 							<tr>
-								<th class="text-left text-xs text-slate-500 uppercase tracking-wide px-4 py-2 border-b border-slate-700">
-									Name
-								</th>
-								<th class="text-left text-xs text-slate-500 uppercase tracking-wide px-4 py-2 border-b border-slate-700">
-									Email
-								</th>
+								<Th>Name</Th>
+								<Th>Email</Th>
 							</tr>
 						</thead>
 						<tbody>
@@ -346,9 +320,9 @@ adminEventRoutes.get("/:id", async (c) => {
 										>
 											{ec.client.name ?? "-"}
 											{unsub && (
-												<span class="px-2 py-0.5 rounded text-xs font-semibold bg-red-950 text-red-400 ml-2">
+												<Badge variant="red" class="ml-2">
 													Unsubscribed
-												</span>
+												</Badge>
 											)}
 										</td>
 										<td
@@ -360,37 +334,24 @@ adminEventRoutes.get("/:id", async (c) => {
 								);
 							})}
 						</tbody>
-					</table>
+					</Table>
 				)}
-			</div>
+			</Card>
 
-			<div class="bg-slate-800 rounded-lg p-6">
-				<h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">
-					Actions
-				</h2>
+			<Card title="Actions">
 				<div class="flex gap-3">
 					<form method="post" action={`/admin/events/${event.id}/notify`}>
-						<button
-							type="submit"
-							class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors cursor-pointer"
-						>
-							Send Notification Now
-						</button>
+						<Button>Send Notification Now</Button>
 					</form>
 					<form
 						method="post"
 						action={`/admin/events/${event.id}/delete`}
 						onsubmit="return confirm('Delete this event and all its reminders?')"
 					>
-						<button
-							type="submit"
-							class="bg-red-600 hover:bg-red-700 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors cursor-pointer"
-						>
-							Delete Event
-						</button>
+						<Button variant="danger">Delete Event</Button>
 					</form>
 				</div>
-			</div>
+			</Card>
 		</Layout>,
 	);
 });
@@ -445,7 +406,7 @@ adminEventRoutes.get("/:id/edit", async (c) => {
 				</div>
 			)}
 
-			<div class="bg-slate-800 rounded-lg p-6">
+			<Card>
 				<form method="post" action={`/admin/events/${event.id}/edit`}>
 					<EventFormFields
 						allClients={allClients}
@@ -458,21 +419,11 @@ adminEventRoutes.get("/:id/edit", async (c) => {
 						}}
 					/>
 					<div class="flex gap-3">
-						<button
-							type="submit"
-							class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors cursor-pointer"
-						>
-							Save Changes
-						</button>
-						<a
-							href={`/admin/events/${event.id}`}
-							class="bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors"
-						>
-							Cancel
-						</a>
+						<Button>Save Changes</Button>
+						<LinkButton href={`/admin/events/${event.id}`}>Cancel</LinkButton>
 					</div>
 				</form>
-			</div>
+			</Card>
 		</Layout>,
 	);
 });
@@ -536,10 +487,6 @@ adminEventRoutes.post("/:id/notify", async (c) => {
 		return c.redirect("/admin/events");
 	}
 
-	const baseUrl = (process.env.APP_BASE_URL ?? "http://localhost:3001").replace(
-		/\/$/,
-		"",
-	);
 	const subject = `Reminder: ${event.title}`;
 
 	const activeClients = event.eventClients.filter(
@@ -548,17 +495,39 @@ adminEventRoutes.post("/:id/notify", async (c) => {
 
 	await Promise.all(
 		activeClients.map((ec) => {
-			const unsubscribeFooter = ec.client.unsubscribeToken
-				? `<p style="margin-top:2rem;font-size:0.8rem;color:#666;"><a href="${escapeHtml(`${baseUrl}/unsubscribe/${ec.client.unsubscribeToken}`)}">Unsubscribe</a></p>`
-				: "";
-			const html = [
-				`<h1>${escapeHtml(event.title)}</h1>`,
-				`<p><strong>Date:</strong> ${escapeHtml(event.eventDate)}</p>`,
-				event.description ? `<p>${escapeHtml(event.description)}</p>` : "",
-				unsubscribeFooter,
-			].join("\n");
+			const html = notifyEmail({
+				eventTitle: event.title,
+				eventDate: event.eventDate,
+				eventDescription: event.description ?? null,
+				unsubscribeToken: ec.client.unsubscribeToken,
+			});
 			return sendEmail(ec.client.email, subject, html);
 		}),
+	);
+
+	// Find or create the sentinel eventReminder row (daysBefore: -1) for manual pushes
+	let [manualReminder] = await db
+		.select()
+		.from(eventReminders)
+		.where(
+			and(eq(eventReminders.eventId, id), eq(eventReminders.daysBefore, -1)),
+		);
+
+	if (!manualReminder) {
+		[manualReminder] = await db
+			.insert(eventReminders)
+			.values({ eventId: id, daysBefore: -1 })
+			.returning();
+	}
+
+	// Log each sent notification to sent_reminders
+	await Promise.all(
+		activeClients.map((ec) =>
+			db.insert(sentReminders).values({
+				eventReminderId: manualReminder.id,
+				clientId: ec.client.id,
+			}),
+		),
 	);
 
 	return c.redirect(`/admin/events/${id}?notified=${activeClients.length}`);

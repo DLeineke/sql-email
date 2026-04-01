@@ -7,7 +7,8 @@ import {
 	events,
 	sentReminders,
 } from "./db/schema";
-import { escapeHtml, sendEmail } from "./email";
+import { sendEmail } from "./email";
+import { reminderEmail, summaryEmail } from "./lib/email-templates";
 
 const reminderTimezone = process.env.TZ_REMINDERS ?? "UTC";
 
@@ -19,20 +20,6 @@ function todayInTimezone(): string {
 		month: "2-digit",
 		day: "2-digit",
 	}).format(new Date());
-}
-
-const appBaseUrl =
-	process.env.APP_BASE_URL?.replace(/\/$/, "") ?? "http://localhost:3001";
-
-function unsubscribeLink(token: string | null): string {
-	if (!token) return "";
-	return `${appBaseUrl}/unsubscribe/${encodeURIComponent(token)}`;
-}
-
-function unsubscribeFooter(token: string | null): string {
-	if (!token) return "";
-	const link = unsubscribeLink(token);
-	return `<p style="margin-top:24px;font-size:12px;color:#888;">Don't want these emails? <a href="${escapeHtml(link)}">Unsubscribe</a>.</p>`;
 }
 
 interface PendingReminder {
@@ -160,11 +147,13 @@ export async function processReminders() {
 	// Send individual reminder emails
 	for (const r of individualReminders) {
 		const subject = `Reminder: "${r.eventTitle}" is in ${r.daysBefore} day(s)`;
-		const html = `
-			<p>Hi${r.clientName ? ` ${escapeHtml(r.clientName)}` : ""},</p>
-			<p>This is a reminder that <strong>${escapeHtml(r.eventTitle)}</strong> is coming up in <strong>${r.daysBefore} day(s)</strong> on ${escapeHtml(r.eventDate)}.</p>
-			${unsubscribeFooter(r.unsubscribeToken)}
-		`.trim();
+		const html = reminderEmail({
+			clientName: r.clientName,
+			eventTitle: r.eventTitle,
+			eventDate: r.eventDate,
+			daysBefore: r.daysBefore,
+			unsubscribeToken: r.unsubscribeToken,
+		});
 		console.log(`[EMAIL] To: ${r.clientEmail} | ${subject}`);
 		await sendEmail(r.clientEmail, subject, html);
 		await markReminderSent(r.reminderId, r.clientId);
@@ -172,19 +161,16 @@ export async function processReminders() {
 
 	// Send summary emails
 	for (const [clientId, data] of summaryClients) {
-		const itemsHtml = data.reminders
-			.map(
-				(r) =>
-					`<li><strong>${escapeHtml(r.eventTitle)}</strong> — in ${r.daysBefore} day(s) (${escapeHtml(r.eventDate)})</li>`,
-			)
-			.join("\n");
 		const subject = `Your daily reminder summary (${data.reminders.length} upcoming)`;
-		const html = `
-			<p>Hi${data.name ? ` ${escapeHtml(data.name)}` : ""},</p>
-			<p>Here is your daily reminder summary:</p>
-			<ul>${itemsHtml}</ul>
-			${unsubscribeFooter(data.unsubscribeToken)}
-		`.trim();
+		const html = summaryEmail({
+			clientName: data.name,
+			reminders: data.reminders.map((r) => ({
+				eventTitle: r.eventTitle,
+				eventDate: r.eventDate,
+				daysBefore: r.daysBefore,
+			})),
+			unsubscribeToken: data.unsubscribeToken,
+		});
 		console.log(
 			`[SUMMARY EMAIL] To: ${data.email} | ${data.reminders.length} reminder(s)`,
 		);
