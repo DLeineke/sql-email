@@ -4,12 +4,13 @@
  */
 import { db } from "./db";
 import { users } from "./db/schema";
+import { logger } from "./lib/logger";
 
 const username = prompt("Username:")?.trim();
 const password = prompt("Password:")?.trim();
 
 if (!username || !password) {
-	console.error("Both username and password are required.");
+	logger.error("Both username and password are required.");
 	process.exit(1);
 }
 
@@ -20,5 +21,5 @@ await db.insert(users).values({ username, passwordHash }).onConflictDoUpdate({
 	set: { passwordHash },
 });
 
-console.log(`Admin user "${username}" seeded.`);
+logger.info(`Admin user "${username}" seeded.`);
 process.exit(0);

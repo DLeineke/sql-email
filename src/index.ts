@@ -3,8 +3,10 @@ import { Cron } from "croner";
 import { sql } from "drizzle-orm";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { Hono } from "hono";
+import { serveStatic } from "hono/bun";
 import { csrf } from "hono/csrf";
 import { db } from "./db";
+import { logger } from "./lib/logger";
 import { requireAuth } from "./middleware/auth";
 import { processReminders } from "./reminders";
 import { adminRoutes } from "./routes/admin";
@@ -18,16 +20,19 @@ import { unsubscribeRoutes } from "./routes/unsubscribe";
 await migrate(db, {
 	migrationsFolder: resolve(import.meta.dir, "../drizzle"),
 });
-console.log("Migrations applied");
+logger.info("Migrations applied");
 
 const app = new Hono();
 
 // CSRF protection: reject cross-origin form submissions on non-GET/HEAD methods
 app.use("*", csrf());
 
+// Serve built CSS
+app.get("/styles.css", serveStatic({ path: "./public/styles.css" }));
+
 // Global error handler: JSON for API requests, HTML for browser requests
 app.onError((err, c) => {
-	console.error(`[error] ${c.req.method} ${c.req.path}:`, err);
+	logger.error(`${c.req.method} ${c.req.path}:`, err);
 	const accept = c.req.header("accept") ?? "";
 	const wantsJson =
 		accept.includes("application/json") ||
@@ -108,21 +113,21 @@ const server = Bun.serve({
 	fetch: app.fetch,
 });
 
-console.log(`Listening on http://localhost:${server.port}`);
+logger.info(`Listening on http://localhost:${server.port}`);
 
 // Schedule daily reminder processing
 const reminderCronExpr = process.env.REMINDER_CRON ?? "0 8 * * *";
 const reminderCron = new Cron(reminderCronExpr, async () => {
-	console.log("[cron] Processing reminders...");
+	logger.info("[cron] Processing reminders...");
 	try {
 		const result = await processReminders();
-		console.log(
+		logger.info(
 			`[cron] Done: ${result.individual} individual, ${result.summaries} summaries`,
 		);
 	} catch (err) {
-		console.error("[cron] Failed:", err);
+		logger.error("[cron] Failed:", err);
 	}
 });
-console.log(
+logger.info(
 	`[cron] Reminder job scheduled (next: ${reminderCron.nextRun()?.toISOString()}`,
 );

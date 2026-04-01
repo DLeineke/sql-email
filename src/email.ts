@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import { logger } from "./lib/logger";
 
 const htmlEscapes: Record<string, string> = {
 	"&": "&amp;",
@@ -21,7 +22,7 @@ const emailFrom = process.env.EMAIL_FROM ?? "noreply@example.com";
 const isConfigured = Boolean(smtpHost && smtpUser && smtpPass);
 
 if (!isConfigured) {
-	console.warn(
+	logger.warn(
 		"[email] SMTP not configured (SMTP_HOST, SMTP_USER, SMTP_PASS). Emails will be logged but not sent.",
 	);
 }
@@ -50,7 +51,7 @@ export async function sendEmail(
 	html: string,
 ): Promise<void> {
 	if (!transport) {
-		console.log(`[email] To: ${to} | Subject: ${subject}`);
+		logger.info(`[email] To: ${to} | Subject: ${subject}`);
 		return;
 	}
 	await transport.sendMail({ from: emailFrom, to, subject, html });

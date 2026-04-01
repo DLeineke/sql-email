@@ -9,6 +9,7 @@ import {
 } from "./db/schema";
 import { sendEmail } from "./email";
 import { reminderEmail, summaryEmail } from "./lib/email-templates";
+import { logger } from "./lib/logger";
 
 const reminderTimezone = process.env.TZ_REMINDERS ?? "UTC";
 
@@ -101,7 +102,7 @@ export async function processReminders() {
 	const pending = await getPendingReminders();
 
 	if (pending.length === 0) {
-		console.log("No pending reminders for today.");
+		logger.info("No pending reminders for today.");
 		return { individual: 0, summaries: 0 };
 	}
 
@@ -154,7 +155,7 @@ export async function processReminders() {
 			daysBefore: r.daysBefore,
 			unsubscribeToken: r.unsubscribeToken,
 		});
-		console.log(`[EMAIL] To: ${r.clientEmail} | ${subject}`);
+		logger.info(`[email] To: ${r.clientEmail} | ${subject}`);
 		await sendEmail(r.clientEmail, subject, html);
 		await markReminderSent(r.reminderId, r.clientId);
 	}
@@ -171,8 +172,8 @@ export async function processReminders() {
 			})),
 			unsubscribeToken: data.unsubscribeToken,
 		});
-		console.log(
-			`[SUMMARY EMAIL] To: ${data.email} | ${data.reminders.length} reminder(s)`,
+		logger.info(
+			`[email] Summary to: ${data.email} | ${data.reminders.length} reminder(s)`,
 		);
 		await sendEmail(data.email, subject, html);
 		for (const r of data.reminders) {

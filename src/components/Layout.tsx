@@ -12,7 +12,7 @@ export const Layout: FC<LayoutProps> = ({ title, children }) => {
 				<meta charset="UTF-8" />
 				<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 				<title>{title}</title>
-				<script src="https://cdn.tailwindcss.com" />
+				<link rel="stylesheet" href="/styles.css" />
 			</head>
 			<body class="bg-slate-900 text-slate-200 min-h-screen">
 				<div class="max-w-5xl mx-auto px-6 py-8">

@@ -17,7 +17,7 @@ const SignupLayout = ({
 			<meta charset="UTF-8" />
 			<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 			<title>{title}</title>
-			<script src="https://cdn.tailwindcss.com"></script>
+			<link rel="stylesheet" href="/styles.css" />
 		</head>
 		<body class="bg-slate-900 text-slate-200 min-h-screen flex items-start justify-center pt-16 px-4">
 			<div class="w-full max-w-md">{children}</div>
