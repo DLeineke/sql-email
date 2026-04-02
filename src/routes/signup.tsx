@@ -1,10 +1,10 @@
 import { Hono } from "hono";
+import { PublicLayout } from "../components/PublicLayout";
 import { db } from "../db";
 import { clients, insertClientSchema } from "../db/schema";
 
 export const signupRoutes = new Hono();
 
-// Minimal layout without the admin nav bar
 const SignupLayout = ({
 	title,
 	children,
@@ -12,17 +12,12 @@ const SignupLayout = ({
 	title: string;
 	children: unknown;
 }) => (
-	<html lang="en">
-		<head>
-			<meta charset="UTF-8" />
-			<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-			<title>{title}</title>
-			<link rel="stylesheet" href="/styles.css" />
-		</head>
-		<body class="bg-slate-900 text-slate-200 min-h-screen flex items-start justify-center pt-16 px-4">
-			<div class="w-full max-w-md">{children}</div>
-		</body>
-	</html>
+	<PublicLayout
+		title={title}
+		bodyClass="bg-slate-900 text-slate-200 min-h-screen flex items-start justify-center pt-16 px-4"
+	>
+		<div class="w-full max-w-md">{children}</div>
+	</PublicLayout>
 );
 
 interface FormProps {

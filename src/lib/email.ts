@@ -1,5 +1,5 @@
 import nodemailer from "nodemailer";
-import { logger } from "./lib/logger";
+import { logger } from "./logger";
 
 const htmlEscapes: Record<string, string> = {
 	"&": "&amp;",

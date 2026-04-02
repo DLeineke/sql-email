@@ -13,6 +13,7 @@ import { adminRoutes } from "./routes/admin";
 import { authRoutes } from "./routes/auth";
 import { clientRoutes } from "./routes/clients";
 import { eventRoutes } from "./routes/events";
+import { reminderRoutes } from "./routes/reminders";
 import { signupRoutes } from "./routes/signup";
 import { unsubscribeRoutes } from "./routes/unsubscribe";
 
@@ -102,9 +103,9 @@ app.route("/admin", adminRoutes);
 app.use("/clients/*", requireAuth);
 app.use("/events/*", requireAuth);
 app.use("/reminders/*", requireAuth);
-app.post("/reminders/process", async (c) => c.json(await processReminders()));
 app.route("/clients", clientRoutes);
 app.route("/events", eventRoutes);
+app.route("/reminders", reminderRoutes);
 
 const port = Number(process.env.PORT) || 3001;
 

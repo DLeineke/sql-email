@@ -7,7 +7,7 @@ import {
 	events,
 	sentReminders,
 } from "./db/schema";
-import { sendEmail } from "./email";
+import { sendEmail } from "./lib/email";
 import { reminderEmail, summaryEmail } from "./lib/email-templates";
 import { logger } from "./lib/logger";
 

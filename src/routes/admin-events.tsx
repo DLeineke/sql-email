@@ -20,7 +20,7 @@ import {
 	events,
 	sentReminders,
 } from "../db/schema";
-import { sendEmail } from "../email";
+import { sendEmail } from "../lib/email";
 import { notifyEmail } from "../lib/email-templates";
 import { parseIntParam } from "../lib/params";
 

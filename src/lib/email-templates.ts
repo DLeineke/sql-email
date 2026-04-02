@@ -1,4 +1,4 @@
-import { escapeHtml } from "../email";
+import { escapeHtml } from "./email";
 
 const appBaseUrl = (
 	process.env.APP_BASE_URL ?? "http://localhost:3001"
