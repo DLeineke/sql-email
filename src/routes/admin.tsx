@@ -8,6 +8,7 @@ import { db } from "../db";
 import { adminClientRoutes } from "./admin-clients";
 import { adminEventRoutes } from "./admin-events";
 import { adminReminderRoutes } from "./admin-reminders";
+import { adminUserRoutes } from "./admin-users";
 
 interface JournalEntry {
 	idx: number;
@@ -47,6 +48,7 @@ export const adminRoutes = new Hono();
 adminRoutes.route("/clients", adminClientRoutes);
 adminRoutes.route("/events", adminEventRoutes);
 adminRoutes.route("/reminders", adminReminderRoutes);
+adminRoutes.route("/users", adminUserRoutes);
 
 adminRoutes.get("/", (c) => {
 	return c.html(
