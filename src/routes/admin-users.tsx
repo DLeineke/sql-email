@@ -12,18 +12,22 @@ import {
 	Th,
 } from "../components/ui";
 import { db } from "../db";
-import { users } from "../db/schema";
+import { type UserRole, users } from "../db/schema";
 import { parseIntParam } from "../lib/params";
 
 export const adminUserRoutes = new Hono();
 
 adminUserRoutes.get("/", async (c) => {
-	const currentUser = c.get("user") as { id: number; username: string };
+	const currentUser = c.get("user") as {
+		id: number;
+		username: string;
+		role: UserRole;
+	};
 	const error = c.req.query("error");
 	const rows = await db.select().from(users).orderBy(desc(users.createdAt));
 
 	return c.html(
-		<Layout title="Users - sql-email">
+		<Layout title="Users - sql-email" userRole={currentUser.role}>
 			<div class="flex items-center justify-between mb-6">
 				<h1 class="text-2xl font-bold text-white">Users</h1>
 				<LinkButton href="/admin/users/new" variant="primary">
@@ -45,6 +49,7 @@ adminUserRoutes.get("/", async (c) => {
 						<thead>
 							<tr>
 								<Th>Username</Th>
+								<Th>Role</Th>
 								<Th>Created</Th>
 								<th class="px-4 py-2 border-b border-slate-700" />
 							</tr>
@@ -58,6 +63,13 @@ adminUserRoutes.get("/", async (c) => {
 											<Badge variant="gray" class="ml-2">
 												you
 											</Badge>
+										)}
+									</TdPlain>
+									<TdPlain>
+										{u.role === "admin" ? (
+											<Badge variant="green">Admin</Badge>
+										) : (
+											<Badge variant="gray">Viewer</Badge>
 										)}
 									</TdPlain>
 									<Td>{new Date(u.createdAt).toISOString().slice(0, 10)}</Td>
@@ -92,10 +104,15 @@ adminUserRoutes.get("/", async (c) => {
 interface NewUserFormProps {
 	errors?: string[];
 	usernameValue?: string;
+	roleValue?: UserRole;
 }
 
-const NewUserForm = ({ errors, usernameValue = "" }: NewUserFormProps) => (
-	<Layout title="New User - sql-email">
+const NewUserForm = ({
+	errors,
+	usernameValue = "",
+	roleValue = "viewer",
+}: NewUserFormProps) => (
+	<Layout title="New User - sql-email" userRole="admin">
 		<div class="flex items-center justify-between mb-6">
 			<h1 class="text-2xl font-bold text-white">New User</h1>
 			<LinkButton href="/admin/users" variant="secondary">
@@ -103,7 +120,7 @@ const NewUserForm = ({ errors, usernameValue = "" }: NewUserFormProps) => (
 			</LinkButton>
 		</div>
 
-		<Card title="Create Admin User">
+		<Card title="Create User">
 			{errors && errors.length > 0 && (
 				<div class="mb-4 text-sm text-red-400 bg-red-950 rounded px-4 py-3">
 					{errors.map((e) => (
@@ -143,18 +160,42 @@ const NewUserForm = ({ errors, usernameValue = "" }: NewUserFormProps) => (
 						class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
 					/>
 				</div>
+				<div>
+					<label
+						for="role"
+						class="block text-xs text-slate-400 uppercase tracking-wide mb-1"
+					>
+						Role
+					</label>
+					<select
+						id="role"
+						name="role"
+						class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
+					>
+						<option value="admin" selected={roleValue === "admin"}>
+							Admin
+						</option>
+						<option value="viewer" selected={roleValue === "viewer"}>
+							Viewer
+						</option>
+					</select>
+				</div>
 				<Button type="submit">Create User</Button>
 			</form>
 		</Card>
 	</Layout>
 );
 
-adminUserRoutes.get("/new", (c) => c.html(<NewUserForm />));
+adminUserRoutes.get("/new", (c) => {
+	return c.html(<NewUserForm />);
+});
 
 adminUserRoutes.post("/", async (c) => {
 	const body = await c.req.parseBody();
 	const username = String(body.username ?? "").trim();
 	const password = String(body.password ?? "");
+	const roleRaw = String(body.role ?? "viewer");
+	const role: UserRole = roleRaw === "admin" ? "admin" : "viewer";
 
 	const errors: string[] = [];
 	if (!username) errors.push("Username is required.");
@@ -163,7 +204,7 @@ adminUserRoutes.post("/", async (c) => {
 
 	if (errors.length > 0) {
 		return c.html(
-			<NewUserForm errors={errors} usernameValue={username} />,
+			<NewUserForm errors={errors} usernameValue={username} roleValue={role} />,
 			400,
 		);
 	}
@@ -171,12 +212,13 @@ adminUserRoutes.post("/", async (c) => {
 	const passwordHash = await Bun.password.hash(password);
 
 	try {
-		await db.insert(users).values({ username, passwordHash });
+		await db.insert(users).values({ username, passwordHash, role });
 	} catch {
 		return c.html(
 			<NewUserForm
 				errors={["That username is already taken."]}
 				usernameValue={username}
+				roleValue={role}
 			/>,
 			409,
 		);
@@ -186,7 +228,8 @@ adminUserRoutes.post("/", async (c) => {
 });
 
 adminUserRoutes.post("/:id/delete", async (c) => {
-	const currentUser = c.get("user") as { id: number; username: string };
+	const currentUser = c.get("user") as { id: number; role: UserRole };
+
 	const id = parseIntParam(c.req.param("id"));
 	if (id === null) return c.redirect("/admin/users");
 

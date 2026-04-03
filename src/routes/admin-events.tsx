@@ -14,6 +14,7 @@ import {
 } from "../components/ui";
 import { db } from "../db";
 import {
+	categories,
 	clients,
 	eventClients,
 	eventReminders,
@@ -36,6 +37,7 @@ function parseEventForm(form: FormData):
 				title: string;
 				description: string | null;
 				eventDate: string;
+				categoryId: number | null;
 				daysBefore: number[];
 				clientIds: number[];
 			};
@@ -48,6 +50,7 @@ function parseEventForm(form: FormData):
 	const description =
 		(form.get("description") as string | null)?.trim() || null;
 	const eventDate = (form.get("eventDate") as string | null)?.trim() ?? "";
+	const categoryIdRaw = (form.get("categoryId") as string | null)?.trim() ?? "";
 	const daysBeforeRaw = (form.get("daysBefore") as string | null)?.trim() ?? "";
 	const clientIdValues = form.getAll("clientIds") as string[];
 
@@ -63,6 +66,12 @@ function parseEventForm(form: FormData):
 			error: "A valid event date (YYYY-MM-DD) is required.",
 		};
 	}
+
+	const categoryId = categoryIdRaw
+		? Number.isInteger(Number(categoryIdRaw))
+			? Number(categoryIdRaw)
+			: null
+		: null;
 
 	const daysBefore: number[] = [];
 	if (daysBeforeRaw) {
@@ -84,7 +93,7 @@ function parseEventForm(form: FormData):
 
 	return {
 		success: true,
-		data: { title, description, eventDate, daysBefore, clientIds },
+		data: { title, description, eventDate, categoryId, daysBefore, clientIds },
 	};
 }
 
@@ -92,28 +101,83 @@ function parseEventForm(form: FormData):
 
 // GET /admin/events — list all events
 adminEventRoutes.get("/", async (c) => {
-	const rows = await db
+	const currentUser = c.get("user") as { role: string };
+	const isAdmin = currentUser.role === "admin";
+	const filterCategoryId = parseIntParam(c.req.query("category") ?? "");
+
+	const allCategories = await db
+		.select()
+		.from(categories)
+		.orderBy(categories.name);
+
+	const query = db
 		.select({
 			id: events.id,
 			title: events.title,
 			eventDate: events.eventDate,
+			categoryId: events.categoryId,
+			categoryName: categories.name,
+			categoryColor: categories.color,
 			reminderCount: sql<number>`COUNT(DISTINCT ${eventReminders.id})`,
 			clientCount: sql<number>`COUNT(DISTINCT ${eventClients.id})`,
 		})
 		.from(events)
+		.leftJoin(categories, eq(categories.id, events.categoryId))
 		.leftJoin(eventReminders, eq(eventReminders.eventId, events.id))
 		.leftJoin(eventClients, eq(eventClients.eventId, events.id))
-		.groupBy(events.id, events.title, events.eventDate)
+		.groupBy(
+			events.id,
+			events.title,
+			events.eventDate,
+			events.categoryId,
+			categories.name,
+			categories.color,
+		)
 		.orderBy(events.eventDate);
 
+	const rows = filterCategoryId
+		? await query.where(eq(events.categoryId, filterCategoryId))
+		: await query;
+
 	return c.html(
-		<Layout title="Events - sql-email">
+		<Layout title="Events - sql-email" userRole={currentUser.role}>
 			<div class="flex items-center justify-between mb-6">
 				<h1 class="text-2xl font-bold text-white">Events</h1>
-				<LinkButton href="/admin/events/new" variant="primary">
-					New Event
-				</LinkButton>
+				{isAdmin && (
+					<LinkButton href="/admin/events/new" variant="primary">
+						New Event
+					</LinkButton>
+				)}
 			</div>
+
+			{allCategories.length > 0 && (
+				<div class="flex flex-wrap gap-2 mb-4">
+					<a
+						href="/admin/events"
+						class={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
+							!filterCategoryId
+								? "bg-slate-600 text-white"
+								: "bg-slate-800 text-slate-400 hover:text-white"
+						}`}
+					>
+						All
+					</a>
+					{allCategories.map((cat) => (
+						<a
+							key={cat.id}
+							href={`/admin/events?category=${cat.id}`}
+							class={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
+								filterCategoryId === cat.id
+									? "text-white"
+									: "text-white opacity-60 hover:opacity-100"
+							}`}
+							style={`background-color:${cat.color}`}
+						>
+							{cat.name}
+						</a>
+					))}
+				</div>
+			)}
 
 			<Card title="All Events">
 				{rows.length === 0 ? (
@@ -123,6 +187,7 @@ adminEventRoutes.get("/", async (c) => {
 						<thead>
 							<tr>
 								<Th>Title</Th>
+								<Th>Category</Th>
 								<Th>Event Date</Th>
 								<Th>Reminders</Th>
 								<Th>Clients</Th>
@@ -139,6 +204,13 @@ adminEventRoutes.get("/", async (c) => {
 											{e.title}
 										</a>
 									</TdPlain>
+									<TdPlain>
+										{e.categoryName && e.categoryColor ? (
+											<Badge color={e.categoryColor}>{e.categoryName}</Badge>
+										) : (
+											<span class="text-slate-600">—</span>
+										)}
+									</TdPlain>
 									<Td>{e.eventDate}</Td>
 									<Td>{e.reminderCount}</Td>
 									<Td>{e.clientCount}</Td>
@@ -154,15 +226,19 @@ adminEventRoutes.get("/", async (c) => {
 
 // GET /admin/events/new — create form
 adminEventRoutes.get("/new", async (c) => {
-	const allClients = await db
-		.select({ id: clients.id, name: clients.name, email: clients.email })
-		.from(clients)
-		.orderBy(clients.email);
+	const currentUser = c.get("user") as { role: string };
+	const [allClients, allCategories] = await Promise.all([
+		db
+			.select({ id: clients.id, name: clients.name, email: clients.email })
+			.from(clients)
+			.orderBy(clients.email),
+		db.select().from(categories).orderBy(categories.name),
+	]);
 
 	const error = c.req.query("error");
 
 	return c.html(
-		<Layout title="New Event - sql-email">
+		<Layout title="New Event - sql-email" userRole={currentUser.role}>
 			<h1 class="text-2xl font-bold text-white mb-6">New Event</h1>
 
 			{error && (
@@ -173,7 +249,10 @@ adminEventRoutes.get("/new", async (c) => {
 
 			<Card>
 				<form method="post" action="/admin/events">
-					<EventFormFields allClients={allClients} />
+					<EventFormFields
+						allClients={allClients}
+						allCategories={allCategories}
+					/>
 					<Button>Create Event</Button>
 				</form>
 			</Card>
@@ -192,12 +271,13 @@ adminEventRoutes.post("/", async (c) => {
 		);
 	}
 
-	const { title, description, eventDate, daysBefore, clientIds } = parsed.data;
+	const { title, description, eventDate, categoryId, daysBefore, clientIds } =
+		parsed.data;
 
 	const event = await db.transaction(async (tx) => {
 		const [created] = await tx
 			.insert(events)
-			.values({ title, description, eventDate })
+			.values({ title, description, eventDate, categoryId })
 			.returning();
 
 		if (daysBefore.length > 0) {
@@ -226,10 +306,12 @@ adminEventRoutes.post("/", async (c) => {
 
 // GET /admin/events/:id — event detail
 adminEventRoutes.get("/:id", async (c) => {
+	const currentUser = c.get("user") as { role: string };
+	const isAdmin = currentUser.role === "admin";
 	const id = parseIntParam(c.req.param("id"));
 	if (id === null)
 		return c.html(
-			<Layout title="Not Found - sql-email">
+			<Layout title="Not Found - sql-email" userRole={currentUser.role}>
 				<p class="text-slate-400">Event not found.</p>
 			</Layout>,
 			404,
@@ -237,12 +319,16 @@ adminEventRoutes.get("/:id", async (c) => {
 
 	const event = await db.query.events.findFirst({
 		where: eq(events.id, id),
-		with: { reminders: true, eventClients: { with: { client: true } } },
+		with: {
+			category: true,
+			reminders: true,
+			eventClients: { with: { client: true } },
+		},
 	});
 
 	if (!event) {
 		return c.html(
-			<Layout title="Not Found - sql-email">
+			<Layout title="Not Found - sql-email" userRole={currentUser.role}>
 				<p class="text-slate-400">Event not found.</p>
 			</Layout>,
 			404,
@@ -252,7 +338,7 @@ adminEventRoutes.get("/:id", async (c) => {
 	const notified = c.req.query("notified");
 
 	return c.html(
-		<Layout title={`${event.title} - sql-email`}>
+		<Layout title={`${event.title} - sql-email`} userRole={currentUser.role}>
 			{notified && (
 				<div class="bg-green-950 border border-green-500 text-green-300 rounded-lg px-4 py-3 mb-6 text-sm">
 					Notification sent to {notified} client(s).
@@ -260,7 +346,9 @@ adminEventRoutes.get("/:id", async (c) => {
 			)}
 			<div class="flex items-center justify-between mb-6">
 				<h1 class="text-2xl font-bold text-white">{event.title}</h1>
-				<LinkButton href={`/admin/events/${event.id}/edit`}>Edit</LinkButton>
+				{isAdmin && (
+					<LinkButton href={`/admin/events/${event.id}/edit`}>Edit</LinkButton>
+				)}
 			</div>
 
 			<Card title="Details" class="mb-4">
@@ -269,6 +357,14 @@ adminEventRoutes.get("/:id", async (c) => {
 					<dd class="text-sm">{event.title}</dd>
 					<dt class="text-sm text-slate-500">Event Date</dt>
 					<dd class="text-sm">{event.eventDate}</dd>
+					<dt class="text-sm text-slate-500">Category</dt>
+					<dd class="text-sm">
+						{event.category ? (
+							<Badge color={event.category.color}>{event.category.name}</Badge>
+						) : (
+							<span class="text-slate-500 italic">None</span>
+						)}
+					</dd>
 					{event.description && (
 						<>
 							<dt class="text-sm text-slate-500">Description</dt>
@@ -338,30 +434,33 @@ adminEventRoutes.get("/:id", async (c) => {
 				)}
 			</Card>
 
-			<Card title="Actions">
-				<div class="flex gap-3">
-					<form method="post" action={`/admin/events/${event.id}/notify`}>
-						<Button>Send Notification Now</Button>
-					</form>
-					<form
-						method="post"
-						action={`/admin/events/${event.id}/delete`}
-						onsubmit="return confirm('Delete this event and all its reminders?')"
-					>
-						<Button variant="danger">Delete Event</Button>
-					</form>
-				</div>
-			</Card>
+			{isAdmin && (
+				<Card title="Actions">
+					<div class="flex gap-3">
+						<form method="post" action={`/admin/events/${event.id}/notify`}>
+							<Button>Send Notification Now</Button>
+						</form>
+						<form
+							method="post"
+							action={`/admin/events/${event.id}/delete`}
+							onsubmit="return confirm('Delete this event and all its reminders?')"
+						>
+							<Button variant="danger">Delete Event</Button>
+						</form>
+					</div>
+				</Card>
+			)}
 		</Layout>,
 	);
 });
 
 // GET /admin/events/:id/edit — edit form
 adminEventRoutes.get("/:id/edit", async (c) => {
+	const currentUser = c.get("user") as { role: string };
 	const id = parseIntParam(c.req.param("id"));
 	if (id === null)
 		return c.html(
-			<Layout title="Not Found - sql-email">
+			<Layout title="Not Found - sql-email" userRole={currentUser.role}>
 				<p class="text-slate-400">Event not found.</p>
 			</Layout>,
 			404,
@@ -374,17 +473,20 @@ adminEventRoutes.get("/:id/edit", async (c) => {
 
 	if (!event) {
 		return c.html(
-			<Layout title="Not Found - sql-email">
+			<Layout title="Not Found - sql-email" userRole={currentUser.role}>
 				<p class="text-slate-400">Event not found.</p>
 			</Layout>,
 			404,
 		);
 	}
 
-	const allClients = await db
-		.select({ id: clients.id, name: clients.name, email: clients.email })
-		.from(clients)
-		.orderBy(clients.email);
+	const [allClients, allCategories] = await Promise.all([
+		db
+			.select({ id: clients.id, name: clients.name, email: clients.email })
+			.from(clients)
+			.orderBy(clients.email),
+		db.select().from(categories).orderBy(categories.name),
+	]);
 
 	const assignedClientIds = new Set(
 		event.eventClients.map((ec) => ec.clientId),
@@ -397,7 +499,10 @@ adminEventRoutes.get("/:id/edit", async (c) => {
 	const error = c.req.query("error");
 
 	return c.html(
-		<Layout title={`Edit ${event.title} - sql-email`}>
+		<Layout
+			title={`Edit ${event.title} - sql-email`}
+			userRole={currentUser.role}
+		>
 			<h1 class="text-2xl font-bold text-white mb-6">Edit Event</h1>
 
 			{error && (
@@ -410,10 +515,12 @@ adminEventRoutes.get("/:id/edit", async (c) => {
 				<form method="post" action={`/admin/events/${event.id}/edit`}>
 					<EventFormFields
 						allClients={allClients}
+						allCategories={allCategories}
 						defaults={{
 							title: event.title,
 							description: event.description ?? "",
 							eventDate: event.eventDate,
+							categoryId: event.categoryId ?? null,
 							daysBeforeValue,
 							assignedClientIds,
 						}}
@@ -441,12 +548,13 @@ adminEventRoutes.post("/:id/edit", async (c) => {
 		);
 	}
 
-	const { title, description, eventDate, daysBefore, clientIds } = parsed.data;
+	const { title, description, eventDate, categoryId, daysBefore, clientIds } =
+		parsed.data;
 
 	await db.transaction(async (tx) => {
 		await tx
 			.update(events)
-			.set({ title, description, eventDate })
+			.set({ title, description, eventDate, categoryId })
 			.where(eq(events.id, id));
 
 		// Replace reminders: delete all, re-insert
@@ -549,19 +657,28 @@ interface ClientOption {
 	email: string;
 }
 
+interface CategoryOption {
+	id: number;
+	name: string;
+	color: string;
+}
+
 interface FormDefaults {
 	title: string;
 	description: string;
 	eventDate: string;
+	categoryId: number | null;
 	daysBeforeValue: string;
 	assignedClientIds: Set<number>;
 }
 
 function EventFormFields({
 	allClients,
+	allCategories = [],
 	defaults,
 }: {
 	allClients: ClientOption[];
+	allCategories?: CategoryOption[];
 	defaults?: FormDefaults;
 }) {
 	return (
@@ -607,6 +724,28 @@ function EventFormFields({
 					value={defaults?.eventDate ?? ""}
 					class="w-full bg-slate-900 border border-slate-600 rounded-md text-slate-200 px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
 				/>
+			</div>
+
+			<div class="mb-4">
+				<label for="categoryId" class="block text-sm text-slate-400 mb-1">
+					Category (optional)
+				</label>
+				<select
+					id="categoryId"
+					name="categoryId"
+					class="w-full bg-slate-900 border border-slate-600 rounded-md text-slate-200 px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+				>
+					<option value="">— None —</option>
+					{allCategories.map((cat) => (
+						<option
+							key={cat.id}
+							value={String(cat.id)}
+							selected={defaults?.categoryId === cat.id}
+						>
+							{cat.name}
+						</option>
+					))}
+				</select>
 			</div>
 
 			<div class="mb-4">

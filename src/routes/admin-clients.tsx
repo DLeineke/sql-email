@@ -17,18 +17,20 @@ import { parseIntParam } from "../lib/params";
 
 export const adminClientRoutes = new Hono();
 
-const NotFound = () => (
-	<Layout title="Not Found - sql-email">
+const NotFound = ({ role }: { role?: string }) => (
+	<Layout title="Not Found - sql-email" userRole={role}>
 		<p class="text-slate-400">Client not found.</p>
 	</Layout>
 );
 
 // GET /admin/clients — list all clients
 adminClientRoutes.get("/", async (c) => {
+	const currentUser = c.get("user") as { role: string };
+	const isAdmin = currentUser.role === "admin";
 	const rows = await db.select().from(clients).orderBy(clients.createdAt);
 
 	return c.html(
-		<Layout title="Clients - sql-email">
+		<Layout title="Clients - sql-email" userRole={currentUser.role}>
 			<h1 class="text-2xl font-bold text-white mb-6">Clients</h1>
 
 			<Card title="All Clients">
@@ -42,7 +44,7 @@ adminClientRoutes.get("/", async (c) => {
 								<Th>Email</Th>
 								<Th>Daily Summary</Th>
 								<Th>Joined</Th>
-								<th class="px-4 py-2 border-b border-slate-700" />
+								{isAdmin && <th class="px-4 py-2 border-b border-slate-700" />}
 							</tr>
 						</thead>
 						<tbody>
@@ -65,27 +67,29 @@ adminClientRoutes.get("/", async (c) => {
 										)}
 									</TdPlain>
 									<Td>{new Date(cl.createdAt).toISOString().slice(0, 10)}</Td>
-									<td class="px-4 py-2 border-b border-slate-700 text-sm text-right">
-										<a
-											href={`/admin/clients/${cl.id}/edit`}
-											class="text-slate-400 hover:text-white transition-colors mr-4"
-										>
-											Edit
-										</a>
-										<form
-											method="post"
-											action={`/admin/clients/${cl.id}/delete`}
-											class="inline"
-											onsubmit="return confirm('Delete this client?')"
-										>
-											<button
-												type="submit"
-												class="text-red-400 hover:text-red-300 transition-colors cursor-pointer bg-transparent border-none p-0"
+									{isAdmin && (
+										<td class="px-4 py-2 border-b border-slate-700 text-sm text-right">
+											<a
+												href={`/admin/clients/${cl.id}/edit`}
+												class="text-slate-400 hover:text-white transition-colors mr-4"
 											>
-												Delete
-											</button>
-										</form>
-									</td>
+												Edit
+											</a>
+											<form
+												method="post"
+												action={`/admin/clients/${cl.id}/delete`}
+												class="inline"
+												onsubmit="return confirm('Delete this client?')"
+											>
+												<button
+													type="submit"
+													class="text-red-400 hover:text-red-300 transition-colors cursor-pointer bg-transparent border-none p-0"
+												>
+													Delete
+												</button>
+											</form>
+										</td>
+									)}
 								</tr>
 							))}
 						</tbody>
@@ -98,23 +102,29 @@ adminClientRoutes.get("/", async (c) => {
 
 // GET /admin/clients/:id — client detail
 adminClientRoutes.get("/:id", async (c) => {
+	const currentUser = c.get("user") as { role: string };
+	const isAdmin = currentUser.role === "admin";
 	const id = parseIntParam(c.req.param("id"));
-	if (id === null) return c.html(<NotFound />, 404);
+	if (id === null) return c.html(<NotFound role={currentUser.role} />, 404);
 
 	const client = await db.query.clients.findFirst({
 		where: eq(clients.id, id),
 		with: { eventClients: { with: { event: true } } },
 	});
 
-	if (!client) return c.html(<NotFound />, 404);
+	if (!client) return c.html(<NotFound role={currentUser.role} />, 404);
 
 	return c.html(
-		<Layout title={`${client.email} - sql-email`}>
+		<Layout title={`${client.email} - sql-email`} userRole={currentUser.role}>
 			<div class="flex items-center justify-between mb-6">
 				<h1 class="text-2xl font-bold text-white">
 					{client.name ?? client.email}
 				</h1>
-				<LinkButton href={`/admin/clients/${client.id}/edit`}>Edit</LinkButton>
+				{isAdmin && (
+					<LinkButton href={`/admin/clients/${client.id}/edit`}>
+						Edit
+					</LinkButton>
+				)}
 			</div>
 
 			<Card title="Details" class="mb-4">
@@ -170,23 +180,26 @@ adminClientRoutes.get("/:id", async (c) => {
 				)}
 			</Card>
 
-			<Card title="Actions">
-				<form
-					method="post"
-					action={`/admin/clients/${client.id}/delete`}
-					onsubmit="return confirm('Delete this client and all their reminder records?')"
-				>
-					<Button variant="danger">Delete Client</Button>
-				</form>
-			</Card>
+			{isAdmin && (
+				<Card title="Actions">
+					<form
+						method="post"
+						action={`/admin/clients/${client.id}/delete`}
+						onsubmit="return confirm('Delete this client and all their reminder records?')"
+					>
+						<Button variant="danger">Delete Client</Button>
+					</form>
+				</Card>
+			)}
 		</Layout>,
 	);
 });
 
 // GET /admin/clients/:id/edit — edit form
 adminClientRoutes.get("/:id/edit", async (c) => {
+	const currentUser = c.get("user") as { role: string };
 	const id = parseIntParam(c.req.param("id"));
-	if (id === null) return c.html(<NotFound />, 404);
+	if (id === null) return c.html(<NotFound role={currentUser.role} />, 404);
 
 	const client = await db
 		.select()
@@ -194,12 +207,15 @@ adminClientRoutes.get("/:id/edit", async (c) => {
 		.where(eq(clients.id, id))
 		.then((r) => r[0]);
 
-	if (!client) return c.html(<NotFound />, 404);
+	if (!client) return c.html(<NotFound role={currentUser.role} />, 404);
 
 	const error = c.req.query("error");
 
 	return c.html(
-		<Layout title={`Edit ${client.email} - sql-email`}>
+		<Layout
+			title={`Edit ${client.email} - sql-email`}
+			userRole={currentUser.role}
+		>
 			<h1 class="text-2xl font-bold text-white mb-6">Edit Client</h1>
 
 			{error && (

@@ -61,18 +61,37 @@ const badgeClasses: Record<BadgeVariant, string> = {
 };
 
 interface BadgeProps {
-	variant: BadgeVariant;
+	variant?: BadgeVariant;
+	color?: string;
 	children: Child;
 	class?: string;
 }
 
-export const Badge: FC<BadgeProps> = ({ variant, children, class: cls }) => (
-	<span
-		class={`px-2 py-0.5 rounded text-xs font-semibold ${badgeClasses[variant]}${cls ? ` ${cls}` : ""}`}
-	>
-		{children}
-	</span>
-);
+export const Badge: FC<BadgeProps> = ({
+	variant,
+	color,
+	children,
+	class: cls,
+}) => {
+	if (color) {
+		return (
+			<span
+				class={`px-2 py-0.5 rounded text-xs font-semibold text-white${cls ? ` ${cls}` : ""}`}
+				style={`background-color:${color}`}
+			>
+				{children}
+			</span>
+		);
+	}
+	const variantClass = badgeClasses[variant ?? "gray"];
+	return (
+		<span
+			class={`px-2 py-0.5 rounded text-xs font-semibold ${variantClass}${cls ? ` ${cls}` : ""}`}
+		>
+			{children}
+		</span>
+	);
+};
 
 // ── Button ───────────────────────────────────────────────
 

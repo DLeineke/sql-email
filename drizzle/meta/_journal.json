@@ -15,13 +15,26 @@
       "when": 1774598400000,
       "tag": "20260324000000_add_auth",
       "breakpoints": true
-    }
-    ,
+    },
     {
       "idx": 2,
       "version": "7",
       "when": 1774684800000,
       "tag": "20260325000000_add_unsubscribe_token",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1775088000000,
+      "tag": "20260401000000_add_user_role",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1775174400000,
+      "tag": "20260402000001_add_categories",
       "breakpoints": true
     }
   ]

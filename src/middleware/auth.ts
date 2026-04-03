@@ -22,6 +22,18 @@ export async function requireAuth(c: Context, next: Next) {
 		return c.redirect("/auth/login");
 	}
 
-	c.set("user", { id: row.user.id, username: row.user.username });
+	c.set("user", {
+		id: row.user.id,
+		username: row.user.username,
+		role: row.user.role,
+	});
+	await next();
+}
+
+export async function requireAdmin(c: Context, next: Next) {
+	const user = c.get("user") as { id: number; username: string; role: string };
+	if (user.role !== "admin") {
+		return c.html("Forbidden", 403);
+	}
 	await next();
 }

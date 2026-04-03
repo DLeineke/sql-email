@@ -5,6 +5,8 @@ import { Hono } from "hono";
 import { Layout } from "../components/Layout";
 import { Badge, Button, Card, Table, Td, TdPlain, Th } from "../components/ui";
 import { db } from "../db";
+import { requireAdmin } from "../middleware/auth";
+import { adminCategoryRoutes } from "./admin-categories";
 import { adminClientRoutes } from "./admin-clients";
 import { adminEventRoutes } from "./admin-events";
 import { adminReminderRoutes } from "./admin-reminders";
@@ -48,11 +50,14 @@ export const adminRoutes = new Hono();
 adminRoutes.route("/clients", adminClientRoutes);
 adminRoutes.route("/events", adminEventRoutes);
 adminRoutes.route("/reminders", adminReminderRoutes);
+adminRoutes.use("/users/*", requireAdmin);
 adminRoutes.route("/users", adminUserRoutes);
+adminRoutes.route("/categories", adminCategoryRoutes);
 
 adminRoutes.get("/", (c) => {
+	const currentUser = c.get("user") as { role: string };
 	return c.html(
-		<Layout title="Admin - sql-email">
+		<Layout title="Admin - sql-email" userRole={currentUser.role}>
 			<h1 class="text-2xl font-bold text-white mb-6">Admin Dashboard</h1>
 			<Card title="Quick Links">
 				<ul class="space-y-2">
@@ -87,6 +92,7 @@ adminRoutes.get("/", (c) => {
 });
 
 adminRoutes.get("/maintenance", async (c) => {
+	const currentUser = c.get("user") as { role: string };
 	const journal = readJournal();
 	const applied = await getAppliedMigrations();
 
@@ -102,7 +108,7 @@ adminRoutes.get("/maintenance", async (c) => {
 	const pendingCount = migrations.filter((m) => !m.applied).length;
 
 	return c.html(
-		<Layout title="Maintenance - sql-email">
+		<Layout title="Maintenance - sql-email" userRole={currentUser.role}>
 			<h1 class="text-2xl font-bold text-white mb-6">Maintenance</h1>
 
 			<Card title="Migrations">

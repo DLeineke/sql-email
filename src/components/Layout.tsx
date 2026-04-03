@@ -4,9 +4,10 @@ import { PublicLayout } from "./PublicLayout";
 interface LayoutProps {
 	title: string;
 	children: Child;
+	userRole?: string;
 }
 
-export const Layout: FC<LayoutProps> = ({ title, children }) => (
+export const Layout: FC<LayoutProps> = ({ title, children, userRole }) => (
 	<PublicLayout
 		title={title}
 		bodyClass="bg-slate-900 text-slate-200 min-h-screen"
@@ -32,17 +33,25 @@ export const Layout: FC<LayoutProps> = ({ title, children }) => (
 					Events
 				</a>
 				<a
+					href="/admin/categories"
+					class="text-slate-400 hover:text-white transition-colors"
+				>
+					Categories
+				</a>
+				<a
 					href="/admin/reminders"
 					class="text-slate-400 hover:text-white transition-colors"
 				>
 					Reminders
 				</a>
-				<a
-					href="/admin/users"
-					class="text-slate-400 hover:text-white transition-colors"
-				>
-					Users
-				</a>
+				{userRole === "admin" && (
+					<a
+						href="/admin/users"
+						class="text-slate-400 hover:text-white transition-colors"
+					>
+						Users
+					</a>
+				)}
 				<a
 					href="/admin/maintenance"
 					class="text-slate-400 hover:text-white transition-colors"

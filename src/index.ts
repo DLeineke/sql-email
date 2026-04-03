@@ -7,7 +7,7 @@ import { serveStatic } from "hono/bun";
 import { csrf } from "hono/csrf";
 import { db } from "./db";
 import { logger } from "./lib/logger";
-import { requireAuth } from "./middleware/auth";
+import { requireAdmin, requireAuth } from "./middleware/auth";
 import { processReminders } from "./reminders";
 import { adminRoutes } from "./routes/admin";
 import { authRoutes } from "./routes/auth";
@@ -99,10 +99,16 @@ app.route("/unsubscribe", unsubscribeRoutes);
 app.use("/admin/*", requireAuth);
 app.route("/admin", adminRoutes);
 
-// Protected: API routes
+// Protected: API routes (read access for all authenticated users, writes admin-only)
 app.use("/clients/*", requireAuth);
 app.use("/events/*", requireAuth);
 app.use("/reminders/*", requireAuth);
+app.post("/clients/*", requireAdmin);
+app.patch("/clients/*", requireAdmin);
+app.delete("/clients/*", requireAdmin);
+app.post("/events/*", requireAdmin);
+app.delete("/events/*", requireAdmin);
+app.post("/reminders/*", requireAdmin);
 app.route("/clients", clientRoutes);
 app.route("/events", eventRoutes);
 app.route("/reminders", reminderRoutes);

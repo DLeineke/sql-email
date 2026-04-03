@@ -16,10 +16,13 @@ if (!username || !password) {
 
 const passwordHash = await Bun.password.hash(password);
 
-await db.insert(users).values({ username, passwordHash }).onConflictDoUpdate({
-	target: users.username,
-	set: { passwordHash },
-});
+await db
+	.insert(users)
+	.values({ username, passwordHash, role: "admin" })
+	.onConflictDoUpdate({
+		target: users.username,
+		set: { passwordHash },
+	});
 
 logger.info(`Admin user "${username}" seeded.`);
 process.exit(0);

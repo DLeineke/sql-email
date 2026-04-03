@@ -14,10 +14,13 @@ import { z } from "zod/v4";
 
 // ── Users ────────────────────────────────────────────────
 
+export type UserRole = "admin" | "viewer";
+
 export const users = pgTable("users", {
 	id: serial("id").primaryKey(),
 	username: text("username").notNull().unique(),
 	passwordHash: text("password_hash").notNull(),
+	role: text("role").$type<UserRole>().notNull().default("viewer"),
 	createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -73,6 +76,23 @@ export const updateClientSchema = insertClientSchema.partial().omit({
 });
 export type UpdateClient = z.infer<typeof updateClientSchema>;
 
+// ── Categories ───────────────────────────────────────────
+
+export const categories = pgTable("categories", {
+	id: serial("id").primaryKey(),
+	name: text("name").notNull().unique(),
+	color: text("color").notNull().default("#3b82f6"),
+	createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertCategorySchema = createInsertSchema(categories, {
+	name: z.string().min(1).max(100),
+	color: z
+		.string()
+		.regex(/^#[0-9a-fA-F]{6}$/, "Must be a hex color like #rrggbb"),
+});
+export type InsertCategory = z.infer<typeof insertCategorySchema>;
+
 // ── Events ──────────────────────────────────────────────
 
 export const events = pgTable("events", {
@@ -80,6 +100,9 @@ export const events = pgTable("events", {
 	title: text("title").notNull(),
 	description: text("description"),
 	eventDate: date("event_date", { mode: "string" }).notNull(),
+	categoryId: integer("category_id").references(() => categories.id, {
+		onDelete: "set null",
+	}),
 	createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -131,12 +154,20 @@ export const sentReminders = pgTable("sent_reminders", {
 });
 
 // Relations for Drizzle relational queries
+export const categoriesRelations = relations(categories, ({ many }) => ({
+	events: many(events),
+}));
+
 export const clientsRelations = relations(clients, ({ many }) => ({
 	eventClients: many(eventClients),
 	sentReminders: many(sentReminders),
 }));
 
-export const eventsRelations = relations(events, ({ many }) => ({
+export const eventsRelations = relations(events, ({ one, many }) => ({
+	category: one(categories, {
+		fields: [events.categoryId],
+		references: [categories.id],
+	}),
 	reminders: many(eventReminders),
 	eventClients: many(eventClients),
 }));

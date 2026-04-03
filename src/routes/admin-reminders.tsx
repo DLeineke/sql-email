@@ -9,6 +9,7 @@ export const adminReminderRoutes = new Hono();
 
 // GET /admin/reminders — audit log of sent reminders
 adminReminderRoutes.get("/", async (c) => {
+	const currentUser = c.get("user") as { role: string };
 	const sortParam = c.req.query("sort");
 	const sortAsc = sortParam === "asc";
 	const order = sortAsc
@@ -38,7 +39,7 @@ adminReminderRoutes.get("/", async (c) => {
 	const sortLabel = sortAsc ? "Oldest first" : "Newest first";
 
 	return c.html(
-		<Layout title="Reminders - sql-email">
+		<Layout title="Reminders - sql-email" userRole={currentUser.role}>
 			<div class="flex items-center justify-between mb-6">
 				<h1 class="text-2xl font-bold text-white">Sent Reminders</h1>
 				<a
