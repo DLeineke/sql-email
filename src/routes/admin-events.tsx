@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { Hono } from "hono";
 
 import { Layout } from "../components/Layout";
@@ -19,11 +19,13 @@ import {
 	eventClients,
 	eventReminders,
 	events,
+	type RecurrencePattern,
 	sentReminders,
 } from "../db/schema";
 import { sendEmail } from "../lib/email";
 import { notifyEmail } from "../lib/email-templates";
 import { parseIntParam } from "../lib/params";
+import { syncEventInstances } from "../lib/recurrence";
 
 export const adminEventRoutes = new Hono();
 
@@ -40,6 +42,9 @@ function parseEventForm(form: FormData):
 				categoryId: number | null;
 				daysBefore: number[];
 				clientIds: number[];
+				recurrencePattern: RecurrencePattern | null;
+				recurrenceInterval: number;
+				recurrenceEndDate: string | null;
 			};
 	  }
 	| {
@@ -53,6 +58,12 @@ function parseEventForm(form: FormData):
 	const categoryIdRaw = (form.get("categoryId") as string | null)?.trim() ?? "";
 	const daysBeforeRaw = (form.get("daysBefore") as string | null)?.trim() ?? "";
 	const clientIdValues = form.getAll("clientIds") as string[];
+	const recurrencePatternRaw =
+		(form.get("recurrencePattern") as string | null)?.trim() || null;
+	const recurrenceIntervalRaw =
+		(form.get("recurrenceInterval") as string | null)?.trim() ?? "1";
+	const recurrenceEndDateRaw =
+		(form.get("recurrenceEndDate") as string | null)?.trim() || null;
 
 	if (!title || title.length > 500) {
 		return {
@@ -66,6 +77,25 @@ function parseEventForm(form: FormData):
 			error: "A valid event date (YYYY-MM-DD) is required.",
 		};
 	}
+
+	const validPatterns = ["daily", "weekly", "monthly"] as const;
+	const recurrencePattern: RecurrencePattern | null =
+		recurrencePatternRaw &&
+		(validPatterns as readonly string[]).includes(recurrencePatternRaw)
+			? (recurrencePatternRaw as RecurrencePattern)
+			: null;
+
+	const recurrenceInterval = Math.max(
+		1,
+		Math.min(365, Number.parseInt(recurrenceIntervalRaw, 10) || 1),
+	);
+
+	const recurrenceEndDate =
+		recurrenceEndDateRaw &&
+		/^\d{4}-\d{2}-\d{2}$/.test(recurrenceEndDateRaw) &&
+		recurrenceEndDateRaw > eventDate
+			? recurrenceEndDateRaw
+			: null;
 
 	const categoryId = categoryIdRaw
 		? Number.isInteger(Number(categoryIdRaw))
@@ -93,7 +123,17 @@ function parseEventForm(form: FormData):
 
 	return {
 		success: true,
-		data: { title, description, eventDate, categoryId, daysBefore, clientIds },
+		data: {
+			title,
+			description,
+			eventDate,
+			categoryId,
+			daysBefore,
+			clientIds,
+			recurrencePattern,
+			recurrenceInterval,
+			recurrenceEndDate,
+		},
 	};
 }
 
@@ -110,7 +150,11 @@ adminEventRoutes.get("/", async (c) => {
 		.from(categories)
 		.orderBy(categories.name);
 
-	const query = db
+	const baseWhere = filterCategoryId
+		? and(isNull(events.parentEventId), eq(events.categoryId, filterCategoryId))
+		: isNull(events.parentEventId);
+
+	const rows = await db
 		.select({
 			id: events.id,
 			title: events.title,
@@ -118,6 +162,7 @@ adminEventRoutes.get("/", async (c) => {
 			categoryId: events.categoryId,
 			categoryName: categories.name,
 			categoryColor: categories.color,
+			recurrencePattern: events.recurrencePattern,
 			reminderCount: sql<number>`COUNT(DISTINCT ${eventReminders.id})`,
 			clientCount: sql<number>`COUNT(DISTINCT ${eventClients.id})`,
 		})
@@ -125,6 +170,7 @@ adminEventRoutes.get("/", async (c) => {
 		.leftJoin(categories, eq(categories.id, events.categoryId))
 		.leftJoin(eventReminders, eq(eventReminders.eventId, events.id))
 		.leftJoin(eventClients, eq(eventClients.eventId, events.id))
+		.where(baseWhere)
 		.groupBy(
 			events.id,
 			events.title,
@@ -134,10 +180,6 @@ adminEventRoutes.get("/", async (c) => {
 			categories.color,
 		)
 		.orderBy(events.eventDate);
-
-	const rows = filterCategoryId
-		? await query.where(eq(events.categoryId, filterCategoryId))
-		: await query;
 
 	return c.html(
 		<Layout title="Events - sql-email" userRole={currentUser.role}>
@@ -189,6 +231,7 @@ adminEventRoutes.get("/", async (c) => {
 								<Th>Title</Th>
 								<Th>Category</Th>
 								<Th>Event Date</Th>
+								<Th>Recurrence</Th>
 								<Th>Reminders</Th>
 								<Th>Clients</Th>
 							</tr>
@@ -212,6 +255,13 @@ adminEventRoutes.get("/", async (c) => {
 										)}
 									</TdPlain>
 									<Td>{e.eventDate}</Td>
+									<TdPlain>
+										{e.recurrencePattern ? (
+											<Badge variant="blue">{e.recurrencePattern}</Badge>
+										) : (
+											<span class="text-slate-600">—</span>
+										)}
+									</TdPlain>
 									<Td>{e.reminderCount}</Td>
 									<Td>{e.clientCount}</Td>
 								</tr>
@@ -271,13 +321,30 @@ adminEventRoutes.post("/", async (c) => {
 		);
 	}
 
-	const { title, description, eventDate, categoryId, daysBefore, clientIds } =
-		parsed.data;
+	const {
+		title,
+		description,
+		eventDate,
+		categoryId,
+		daysBefore,
+		clientIds,
+		recurrencePattern,
+		recurrenceInterval,
+		recurrenceEndDate,
+	} = parsed.data;
 
 	const event = await db.transaction(async (tx) => {
 		const [created] = await tx
 			.insert(events)
-			.values({ title, description, eventDate, categoryId })
+			.values({
+				title,
+				description,
+				eventDate,
+				categoryId,
+				recurrencePattern,
+				recurrenceInterval,
+				recurrenceEndDate,
+			})
 			.returning();
 
 		if (daysBefore.length > 0) {
@@ -301,6 +368,11 @@ adminEventRoutes.post("/", async (c) => {
 		return created;
 	});
 
+	// Generate instances after the template is fully saved (with reminders/clients)
+	if (recurrencePattern) {
+		await syncEventInstances(event.id);
+	}
+
 	return c.redirect(`/admin/events/${event.id}`);
 });
 
@@ -323,6 +395,8 @@ adminEventRoutes.get("/:id", async (c) => {
 			category: true,
 			reminders: true,
 			eventClients: { with: { client: true } },
+			parent: true,
+			instances: true,
 		},
 	});
 
@@ -365,6 +439,37 @@ adminEventRoutes.get("/:id", async (c) => {
 							<span class="text-slate-500 italic">None</span>
 						)}
 					</dd>
+					{event.recurrencePattern && (
+						<>
+							<dt class="text-sm text-slate-500">Recurrence</dt>
+							<dd class="text-sm">
+								<Badge variant="blue">{event.recurrencePattern}</Badge>
+								{event.recurrenceInterval && event.recurrenceInterval > 1 && (
+									<span class="ml-2 text-slate-400 text-xs">
+										every {event.recurrenceInterval} units
+									</span>
+								)}
+								{event.recurrenceEndDate && (
+									<span class="ml-2 text-slate-400 text-xs">
+										until {event.recurrenceEndDate}
+									</span>
+								)}
+							</dd>
+						</>
+					)}
+					{event.parent && (
+						<>
+							<dt class="text-sm text-slate-500">Part of series</dt>
+							<dd class="text-sm">
+								<a
+									href={`/admin/events/${event.parent.id}`}
+									class="text-blue-400 hover:text-blue-300 transition-colors"
+								>
+									{event.parent.title} (template: {event.parent.eventDate})
+								</a>
+							</dd>
+						</>
+					)}
 					{event.description && (
 						<>
 							<dt class="text-sm text-slate-500">Description</dt>
@@ -377,6 +482,37 @@ adminEventRoutes.get("/:id", async (c) => {
 					</dd>
 				</dl>
 			</Card>
+
+			{event.instances && event.instances.length > 0 && (
+				<Card title="Recurring Instances" class="mb-4">
+					<Table>
+						<thead>
+							<tr>
+								<Th>Date</Th>
+								<Th>View</Th>
+							</tr>
+						</thead>
+						<tbody>
+							{event.instances
+								.slice()
+								.sort((a, b) => a.eventDate.localeCompare(b.eventDate))
+								.map((inst) => (
+									<tr key={inst.id}>
+										<Td>{inst.eventDate}</Td>
+										<TdPlain>
+											<a
+												href={`/admin/events/${inst.id}`}
+												class="text-blue-400 hover:text-blue-300 transition-colors text-sm"
+											>
+												View
+											</a>
+										</TdPlain>
+									</tr>
+								))}
+						</tbody>
+					</Table>
+				</Card>
+			)}
 
 			<Card title="Reminder Schedule" class="mb-4">
 				{event.reminders.length === 0 ? (
@@ -436,10 +572,15 @@ adminEventRoutes.get("/:id", async (c) => {
 
 			{isAdmin && (
 				<Card title="Actions">
-					<div class="flex gap-3">
+					<div class="flex gap-3 flex-wrap">
 						<form method="post" action={`/admin/events/${event.id}/notify`}>
 							<Button>Send Notification Now</Button>
 						</form>
+						{event.recurrencePattern && !event.parentEventId && (
+							<form method="post" action={`/admin/events/${event.id}/sync`}>
+								<Button variant="secondary">Regenerate Instances</Button>
+							</form>
+						)}
 						<form
 							method="post"
 							action={`/admin/events/${event.id}/delete`}
@@ -491,12 +632,15 @@ adminEventRoutes.get("/:id/edit", async (c) => {
 	const assignedClientIds = new Set(
 		event.eventClients.map((ec) => ec.clientId),
 	);
+	// Exclude sentinel manual-push reminders (daysBefore = -1) from the edit form
 	const daysBeforeValue = event.reminders
+		.filter((r) => r.daysBefore >= 0)
 		.map((r) => r.daysBefore)
 		.sort((a, b) => b - a)
 		.join(",");
 
 	const error = c.req.query("error");
+	const isInstance = event.parentEventId !== null;
 
 	return c.html(
 		<Layout
@@ -504,6 +648,18 @@ adminEventRoutes.get("/:id/edit", async (c) => {
 			userRole={currentUser.role}
 		>
 			<h1 class="text-2xl font-bold text-white mb-6">Edit Event</h1>
+
+			{isInstance && (
+				<div class="bg-amber-950 border border-amber-600 text-amber-300 rounded-lg px-4 py-3 mb-6 text-sm">
+					This is a recurring instance. Editing it only changes this occurrence.{" "}
+					<a
+						href={`/admin/events/${event.parentEventId}`}
+						class="underline hover:text-amber-200"
+					>
+						View series template
+					</a>
+				</div>
+			)}
 
 			{error && (
 				<div class="bg-red-950 border border-red-500 text-red-300 rounded-lg px-4 py-3 mb-6 text-sm">
@@ -516,6 +672,7 @@ adminEventRoutes.get("/:id/edit", async (c) => {
 					<EventFormFields
 						allClients={allClients}
 						allCategories={allCategories}
+						isInstance={isInstance}
 						defaults={{
 							title: event.title,
 							description: event.description ?? "",
@@ -523,6 +680,9 @@ adminEventRoutes.get("/:id/edit", async (c) => {
 							categoryId: event.categoryId ?? null,
 							daysBeforeValue,
 							assignedClientIds,
+							recurrencePattern: event.recurrencePattern ?? null,
+							recurrenceInterval: event.recurrenceInterval ?? 1,
+							recurrenceEndDate: event.recurrenceEndDate ?? null,
 						}}
 					/>
 					<div class="flex gap-3">
@@ -548,17 +708,48 @@ adminEventRoutes.post("/:id/edit", async (c) => {
 		);
 	}
 
-	const { title, description, eventDate, categoryId, daysBefore, clientIds } =
-		parsed.data;
+	const {
+		title,
+		description,
+		eventDate,
+		categoryId,
+		daysBefore,
+		clientIds,
+		recurrencePattern,
+		recurrenceInterval,
+		recurrenceEndDate,
+	} = parsed.data;
+
+	// Fetch current parentEventId before update
+	const [existing] = await db
+		.select({ parentEventId: events.parentEventId })
+		.from(events)
+		.where(eq(events.id, id));
+	const isTemplate = existing && existing.parentEventId === null;
 
 	await db.transaction(async (tx) => {
 		await tx
 			.update(events)
-			.set({ title, description, eventDate, categoryId })
+			.set({
+				title,
+				description,
+				eventDate,
+				categoryId,
+				recurrencePattern,
+				recurrenceInterval,
+				recurrenceEndDate,
+			})
 			.where(eq(events.id, id));
 
-		// Replace reminders: delete all, re-insert
-		await tx.delete(eventReminders).where(eq(eventReminders.eventId, id));
+		// Replace reminders: delete non-sentinel, re-insert
+		await tx
+			.delete(eventReminders)
+			.where(
+				and(
+					eq(eventReminders.eventId, id),
+					sql`${eventReminders.daysBefore} >= 0`,
+				),
+			);
 		if (daysBefore.length > 0) {
 			await tx
 				.insert(eventReminders)
@@ -577,6 +768,11 @@ adminEventRoutes.post("/:id/edit", async (c) => {
 				);
 		}
 	});
+
+	// If template was updated, sync future instances
+	if (isTemplate && recurrencePattern) {
+		await syncEventInstances(id);
+	}
 
 	return c.redirect(`/admin/events/${id}`);
 });
@@ -641,6 +837,14 @@ adminEventRoutes.post("/:id/notify", async (c) => {
 	return c.redirect(`/admin/events/${id}?notified=${activeClients.length}`);
 });
 
+// POST /admin/events/:id/sync — regenerate recurring instances
+adminEventRoutes.post("/:id/sync", async (c) => {
+	const id = parseIntParam(c.req.param("id"));
+	if (id === null) return c.redirect("/admin/events");
+	await syncEventInstances(id);
+	return c.redirect(`/admin/events/${id}`);
+});
+
 // POST /admin/events/:id/delete — delete event
 adminEventRoutes.post("/:id/delete", async (c) => {
 	const id = parseIntParam(c.req.param("id"));
@@ -670,15 +874,20 @@ interface FormDefaults {
 	categoryId: number | null;
 	daysBeforeValue: string;
 	assignedClientIds: Set<number>;
+	recurrencePattern: RecurrencePattern | null;
+	recurrenceInterval: number;
+	recurrenceEndDate: string | null;
 }
 
 function EventFormFields({
 	allClients,
 	allCategories = [],
+	isInstance = false,
 	defaults,
 }: {
 	allClients: ClientOption[];
 	allCategories?: CategoryOption[];
+	isInstance?: boolean;
 	defaults?: FormDefaults;
 }) {
 	return (
@@ -784,6 +993,83 @@ function EventFormFields({
 							</label>
 						))}
 					</div>
+				</div>
+			)}
+
+			{!isInstance && (
+				<div class="mb-6 border border-slate-700 rounded-lg p-4">
+					<p class="text-sm font-medium text-slate-300 mb-3">Recurrence</p>
+					<div class="flex flex-wrap gap-4">
+						<div class="flex-1 min-w-36">
+							<label
+								for="recurrencePattern"
+								class="block text-sm text-slate-400 mb-1"
+							>
+								Repeats
+							</label>
+							<select
+								id="recurrencePattern"
+								name="recurrencePattern"
+								class="w-full bg-slate-900 border border-slate-600 rounded-md text-slate-200 px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+							>
+								<option value="">— None —</option>
+								<option
+									value="daily"
+									selected={defaults?.recurrencePattern === "daily"}
+								>
+									Daily
+								</option>
+								<option
+									value="weekly"
+									selected={defaults?.recurrencePattern === "weekly"}
+								>
+									Weekly
+								</option>
+								<option
+									value="monthly"
+									selected={defaults?.recurrencePattern === "monthly"}
+								>
+									Monthly
+								</option>
+							</select>
+						</div>
+						<div class="w-28">
+							<label
+								for="recurrenceInterval"
+								class="block text-sm text-slate-400 mb-1"
+							>
+								Every
+							</label>
+							<input
+								type="number"
+								id="recurrenceInterval"
+								name="recurrenceInterval"
+								min="1"
+								max="365"
+								value={String(defaults?.recurrenceInterval ?? 1)}
+								class="w-full bg-slate-900 border border-slate-600 rounded-md text-slate-200 px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+							/>
+						</div>
+						<div class="flex-1 min-w-36">
+							<label
+								for="recurrenceEndDate"
+								class="block text-sm text-slate-400 mb-1"
+							>
+								Until (optional)
+							</label>
+							<input
+								type="date"
+								id="recurrenceEndDate"
+								name="recurrenceEndDate"
+								value={defaults?.recurrenceEndDate ?? ""}
+								class="w-full bg-slate-900 border border-slate-600 rounded-md text-slate-200 px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+							/>
+						</div>
+					</div>
+					<p class="text-xs text-slate-500 mt-2">
+						Instances are generated up to 90 days out (or the until date, if
+						sooner). Editing the template regenerates future instances.
+					</p>
 				</div>
 			)}
 		</>

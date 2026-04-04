@@ -95,6 +95,8 @@ export type InsertCategory = z.infer<typeof insertCategorySchema>;
 
 // ── Events ──────────────────────────────────────────────
 
+export type RecurrencePattern = "daily" | "weekly" | "monthly";
+
 export const events = pgTable("events", {
 	id: serial("id").primaryKey(),
 	title: text("title").notNull(),
@@ -103,12 +105,22 @@ export const events = pgTable("events", {
 	categoryId: integer("category_id").references(() => categories.id, {
 		onDelete: "set null",
 	}),
+	recurrencePattern: text("recurrence_pattern").$type<RecurrencePattern>(),
+	recurrenceInterval: integer("recurrence_interval").default(1),
+	recurrenceEndDate: date("recurrence_end_date", { mode: "string" }),
+	parentEventId: integer("parent_event_id"),
 	createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 export const insertEventSchema = createInsertSchema(events, {
 	title: z.string().min(1).max(500),
 	eventDate: z.iso.date(),
+	recurrencePattern: z
+		.enum(["daily", "weekly", "monthly"])
+		.nullable()
+		.optional(),
+	recurrenceInterval: z.int().min(1).max(365).optional(),
+	recurrenceEndDate: z.iso.date().nullable().optional(),
 }).extend({
 	daysBefore: z.array(z.int().min(0)).optional(),
 	clientIds: z.array(z.int().positive()).optional(),
@@ -168,6 +180,12 @@ export const eventsRelations = relations(events, ({ one, many }) => ({
 		fields: [events.categoryId],
 		references: [categories.id],
 	}),
+	parent: one(events, {
+		fields: [events.parentEventId],
+		references: [events.id],
+		relationName: "eventInstances",
+	}),
+	instances: many(events, { relationName: "eventInstances" }),
 	reminders: many(eventReminders),
 	eventClients: many(eventClients),
 }));

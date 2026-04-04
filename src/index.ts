@@ -7,6 +7,7 @@ import { serveStatic } from "hono/bun";
 import { csrf } from "hono/csrf";
 import { db } from "./db";
 import { logger } from "./lib/logger";
+import { syncAllRecurringEvents } from "./lib/recurrence";
 import { requireAdmin, requireAuth } from "./middleware/auth";
 import { processReminders } from "./reminders";
 import { adminRoutes } from "./routes/admin";
@@ -125,6 +126,13 @@ logger.info(`Listening on http://localhost:${server.port}`);
 // Schedule daily reminder processing
 const reminderCronExpr = process.env.REMINDER_CRON ?? "0 8 * * *";
 const reminderCron = new Cron(reminderCronExpr, async () => {
+	logger.info("[cron] Syncing recurring event instances...");
+	try {
+		await syncAllRecurringEvents();
+	} catch (err) {
+		logger.error("[cron] Recurring event sync failed:", err);
+	}
+
 	logger.info("[cron] Processing reminders...");
 	try {
 		const result = await processReminders();
@@ -132,7 +140,7 @@ const reminderCron = new Cron(reminderCronExpr, async () => {
 			`[cron] Done: ${result.individual} individual, ${result.summaries} summaries`,
 		);
 	} catch (err) {
-		logger.error("[cron] Failed:", err);
+		logger.error("[cron] Reminder processing failed:", err);
 	}
 });
 logger.info(

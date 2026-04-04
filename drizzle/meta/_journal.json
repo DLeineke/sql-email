@@ -36,6 +36,13 @@
       "when": 1775174400000,
       "tag": "20260402000001_add_categories",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1775260800000,
+      "tag": "20260403000000_add_recurring_events",
+      "breakpoints": true
     }
   ]
 }

@@ -51,13 +51,14 @@ export const TdPlain: FC<{ children: Child }> = ({ children }) => (
 
 // ── Badge ────────────────────────────────────────────────
 
-type BadgeVariant = "green" | "yellow" | "red" | "gray";
+type BadgeVariant = "green" | "yellow" | "red" | "gray" | "blue";
 
 const badgeClasses: Record<BadgeVariant, string> = {
 	green: "bg-green-950 text-green-400",
 	yellow: "bg-yellow-950 text-yellow-400",
 	red: "bg-red-950 text-red-400",
 	gray: "bg-slate-700 text-slate-400",
+	blue: "bg-blue-950 text-blue-400",
 };
 
 interface BadgeProps {
