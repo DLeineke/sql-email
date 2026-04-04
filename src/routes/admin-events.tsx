@@ -286,6 +286,12 @@ adminEventRoutes.get("/new", async (c) => {
 	]);
 
 	const error = c.req.query("error");
+	// Pre-fill date from calendar click-to-create
+	const prefillDate = c.req.query("date");
+	const defaultDate =
+		prefillDate && /^\d{4}-\d{2}-\d{2}$/.test(prefillDate)
+			? prefillDate
+			: undefined;
 
 	return c.html(
 		<Layout title="New Event - sql-email" userRole={currentUser.role}>
@@ -302,6 +308,21 @@ adminEventRoutes.get("/new", async (c) => {
 					<EventFormFields
 						allClients={allClients}
 						allCategories={allCategories}
+						defaults={
+							defaultDate
+								? {
+										title: "",
+										description: "",
+										eventDate: defaultDate,
+										categoryId: null,
+										daysBeforeValue: "",
+										assignedClientIds: new Set(),
+										recurrencePattern: null,
+										recurrenceInterval: 1,
+										recurrenceEndDate: null,
+									}
+								: undefined
+						}
 					/>
 					<Button>Create Event</Button>
 				</form>

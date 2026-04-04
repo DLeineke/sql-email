@@ -7,21 +7,10 @@ import {
 	events,
 	sentReminders,
 } from "./db/schema";
+import { todayInTimezone } from "./lib/date";
 import { sendEmail } from "./lib/email";
 import { reminderEmail, summaryEmail } from "./lib/email-templates";
 import { logger } from "./lib/logger";
-
-const reminderTimezone = process.env.TZ_REMINDERS ?? "UTC";
-
-/** Returns today's date string (YYYY-MM-DD) in the configured reminder timezone. */
-function todayInTimezone(): string {
-	return new Intl.DateTimeFormat("en-CA", {
-		timeZone: reminderTimezone,
-		year: "numeric",
-		month: "2-digit",
-		day: "2-digit",
-	}).format(new Date());
-}
 
 interface PendingReminder {
 	eventId: number;
